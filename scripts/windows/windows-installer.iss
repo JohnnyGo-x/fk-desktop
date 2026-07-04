@@ -1,18 +1,18 @@
 [Setup]
 AppName=Flowkeeper
-AppVersion={#GetEnv('FK_VERSION')}
+AppVersion=1.0.0
 AppPublisher=flowkeeper.org
 AppPublisherURL=https://flowkeeper.org
 AppSupportURL=https://flowkeeper.org
 AppUpdatesURL=https://flowkeeper.org
 DefaultDirName={userpf}\Flowkeeper
 DefaultGroupName=Flowkeeper
-SetupIconFile=res\flowkeeper.ico
+SetupIconFile={#GetEnv('FK_REPO_ROOT')}\res\flowkeeper.ico
 UninstallDisplayIcon={app}\Flowkeeper.exe
 PrivilegesRequired=lowest
 UninstallDisplayName=Flowkeeper
-SourceDir=..\..
-OutputDir=dist
+SourceDir={#GetEnv('FK_REPO_ROOT')}
+OutputDir={#GetEnv('FK_REPO_ROOT')}\dist
 
 [Tasks]
 Name: "desktopicon"; Description: "Create a &desktop icon"; GroupDescription: "Additional icons:"

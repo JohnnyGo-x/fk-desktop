@@ -18,12 +18,20 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
 
-set -e
+set -euo pipefail
 
-PATH=$PATH:$(pwd)/venv/Lib/site-packages/PySide6
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+cd "$REPO_ROOT"
+
+if [[ -f "$REPO_ROOT/venv/Scripts/activate" ]]; then
+  source "$REPO_ROOT/venv/Scripts/activate"
+elif [[ -f "$REPO_ROOT/venv/bin/activate" ]]; then
+  source "$REPO_ROOT/venv/bin/activate"
+fi
 
 cd res
 qrc="resources.qrc"
-rcc --project -o "$qrc"
-rcc -g python "$qrc" -o "../src/fk/desktop/resources.py"
+pyside6-rcc --project -o "$qrc"
+pyside6-rcc -g python "$qrc" -o "../src/fk/desktop/resources.py"
 rm "$qrc"

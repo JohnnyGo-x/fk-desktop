@@ -87,6 +87,7 @@
 
 构建方式与原项目一致，依赖 Qt 6.7.0+ 与 Python 3.9+。详见下方原项目说明；
 macOS 下可直接执行 `scripts/macos/package-nuitka.sh` 一键构建。
+Windows 下可直接执行 `py -3 -m PyInstaller scripts/common/pyinstaller/portable.spec --distpath=build` 一键构建。
 
 ```shell
 python3 -m venv venv
