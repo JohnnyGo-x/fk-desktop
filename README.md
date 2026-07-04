@@ -1,122 +1,119 @@
-# Flowkeeper
+# Flowkeeper (自定义分支)
 
-![Pipeline status](https://github.com/flowkeeper-org/fk-desktop/actions/workflows/main.yml/badge.svg?branch=main "Pipeline status")
-[![Coverage Status](https://coveralls.io/repos/github/flowkeeper-org/fk-desktop/badge.svg?branch=main)](https://coveralls.io/github/flowkeeper-org/fk-desktop?branch=main)
-[![Code Smells](https://sonarcloud.io/api/project_badges/measure?project=flowkeeper-org_fk-desktop&metric=code_smells)](https://sonarcloud.io/summary/new_code?id=flowkeeper-org_fk-desktop)
-[![OBS Build Result](https://build.opensuse.org/projects/home:flowkeeper/packages/flowkeeper/badge.svg?type=default)](https://build.opensuse.org/package/show/home:flowkeeper/flowkeeper)
+本仓库基于开源项目 [flowkeeper-org/fk-desktop](https://github.com/flowkeeper-org/fk-desktop)
+（原项目作者 Constantine Kulak，GPL-3.0 许可证）进行二次开发，在保留原版番茄钟核心功能的基础上，
+针对个人工作流做了一系列界面与交互上的定制改造。
 
-Flowkeeper is an independent Pomodoro Technique desktop timer for power users. It is a 
-simple tool, which focuses on doing one thing well. It is Free Software with open source. 
+原项目简介：Flowkeeper 是一款专注、独立的番茄钟桌面计时器，面向重度用户，以「把一件事做好」为目标，
+是自由开源软件。详见 [flowkeeper.org](https://flowkeeper.org) 。
 
-Visit [flowkeeper.org](https://flowkeeper.org) for screenshots, downloads and FAQ.
+---
 
-If you used it, I will appreciate it if you take a minute to 
-[provide some feedback](https://www.producthunt.com/products/flowkeeper/reviews/new). 
-Your constructive criticism is welcome!
+## 主要修改内容
 
-![Flowkeeper screenshot](doc/fk-simple.png "Flowkeeper screenshot")
+### 1. 新增「今日计划」视图
 
-## Building
+- 新增 `src/fk/qt/today_plan_widget.py`，实现一个独立的「今日计划」面板，取代默认工作项列表作为主界面。
+  - 支持为每个工作项规划当日番茄钟数量，并显示完成进度。
+  - 支持一键开始/回顾当天计划，统计当日已完成番茄钟数量。
+  - 自定义 `Stepper` 步进器组件用于调整计划番茄数。
+  - 自定义 `PlanDialog` 用于集中规划当日各项工作的番茄钟分配。
+- 在 `src/fk/desktop/desktop.py` 中新增 `window.todayPlan` 动作与 `toggle_today_plan` 方法，
+  通过工具栏切换「今日计划」与「任务列表」两种视图。
+  - 默认启动即进入「今日计划」视图，隐藏左侧 backlog 列表面板。
+  - 新增 `toolToday` / `toolTasks` 工具按钮用于在两视图间切换。
+- 新增 `src/fk/desktop/Flowkeeper.py` 作为可直接运行的入口脚本，便于以 `python -m fk.desktop.Flowkeeper` 方式启动。
 
-Flowkeeper has a single major dependency -- Qt 6.7.0, which in turn requires Python 3.9 or later. To create 
-installers and binary packages we build Flowkeeper on Ubuntu 22.04 using Python 3.11 and 6.7.0. We also
-test Flowkeeper with the latest Qt 6.8.x on OpenSUSE Tumbleweed.
+### 2. 统计窗口增强：日历 + 时间线
 
-### Building for Linux and macOS
+- 新增 `src/fk/qt/calendar_widget.py`：自绘月历组件，支持月份切换、日期点选、高亮当天与有记录的日期。
+- 新增 `src/fk/qt/timeline_widget.py`：当天番茄钟时间线组件，按完成状态（已完成/进行中/已作废）着色，
+  并自动插入「午休」「晚休」分隔条目。
+- 在 `src/fk/desktop/stats_window.py` 中将统计默认周期从「周」改为「日」，
+  并新增日视图容器（日历 + 时间线），与原有柱状图并存，按所选周期切换显示。
+- 修复 `_drop_time` 对各周期边界日期的计算（周按周一到周日、年按 1/1–12/31、月按 1 日到月末、
+  6 个月按当前月往前回溯 5 个月），并保留原始时区信息。
 
-On some lean distributions like a minimal installation of Debian 12, you 
-might need to install `libxcb-cursor0` first, e.g.
+### 3. 重新设计任务列表样式与委托
 
-```shell
-sudo apt install libxcb-cursor0
-```
+- `src/fk/qt/workitem_text_delegate.py` 重写：
+  - 每行左侧绘制圆形进度环（Apple 风格），完成时显示对勾，未完成时按完成比例填充扇形。
+  - 右侧显示元信息（已完成/总数、跨天数）。
+  - 完成态工作项标题改为灰色并加删除线；底部绘制分隔线。
+- `src/fk/qt/pomodoro_delegate.py` 重写：
+  - 弃用原有 SVG 图标渲染，改为自绘圆角方块表示每个番茄钟。
+  - 完成的番茄钟按所在日期映射不同颜色，便于直观区分跨天完成情况。
+  - 进行中显示十字标记，已作废显示空心方块。
+- `src/fk/qt/workitem_tableview.py` / `src/fk/qt/backlog_tableview.py`：
+  - 新增自定 `_WorkitemEditDelegate` / `_BacklogEditDelegate`，使内联编辑输入框采用圆角蓝色边框样式，最小高度 32px。
+  - Backlog 表格启用交替行底色。
 
-Create a virtual environment and install dependencies:
+### 4. 新增「重新打开」工作项功能
+
+- `src/fk/core/events.py` 与 `src/fk/core/abstract_event_source.py` 新增
+  `BeforeWorkitemReopen` / `AfterWorkitemReopen` 事件。
+- `src/fk/core/workitem.py` 新增 `unseal()` 方法，将已封存（sealed）的工作项恢复为 `new` 状态。
+- `src/fk/core/workitem_strategies.py` 新增 `ReopenWorkitemStrategy` 策略。
+- `src/fk/qt/workitem_tableview.py` 新增右键菜单项「Reopen Item」（`Ctrl+Shift+R`），
+  仅对已封存的工作项启用。配套图标 `res/icons/*/24x24/tool-reopen.svg`。
+
+### 5. UI / 样式调整
+
+- `res/core.ui`：左侧工具栏新增 `toolToday` / `toolTasks` / `toolStats` 三个按钮，
+  并将 `toolBacklogs` 默认隐藏。
+- `res/stats.ui`：将「Prev/Next」按钮调整为 `< Prev` / `Next >`，把默认选中周期从「week」改为「day」。
+- `res/style-template.qss` 及各主题 JSON（`style-dark.json` 等）：
+  - 新增 `HOVER_BG_COLOR`、`ALTERNATE_ROW_COLOR`、`ITEM_RADIUS`、`TOOLBAR_RADIUS` 等主题变量。
+  - 表格行增加 hover 背景与内边距，圆角化工具按钮，搜索框样式调整等。
+- 新增工具栏图标资源（`tool-reopen` / `tool-stats` / `tool-tasks` / `tool-today`，分 dark/light/mixed 三套）。
+
+### 6. 移除搜索栏
+
+- 在 `src/fk/desktop/desktop.py` 中移除了原 `SearchBar` 的创建与挂载（标注为 "Search bar removed"），
+  `show_search()` 方法被置空。相关 UI 资源保留但不再生效。
+
+### 7. macOS 打包脚本增强
+
+- `scripts/macos/package-nuitka.sh` 重构：
+  - 自动检测并选择 Python 3.10+ 解释器（优先 3.12/3.13）。
+  - 自动创建虚拟环境并安装 PySide6、Nuitka 等依赖。
+  - 自动生成 `flowkeeper.icns` 与 `resources.py`。
+  - 使用项目根目录的绝对路径，避免依赖当前工作目录。
+  - 默认以未签名方式构建 `.app` 包。
+
+---
+
+## 构建
+
+构建方式与原项目一致，依赖 Qt 6.7.0+ 与 Python 3.9+。详见下方原项目说明；
+macOS 下可直接执行 `scripts/macos/package-nuitka.sh` 一键构建。
 
 ```shell
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-```
-
-Note that `requirements.txt` contains ALL libraries and tools needed to run, test and
-create installers. You can use `requirements-run.txt` if you only want to debug
-Flowkeeper locally, or `requirements-build.txt` if you also want to create distributable /
-portable bundles.
-
-Then you need to "generate resources", which means converting data files in `/res` directory into
-the corresponding Python classes. Whenever you make changes to files in `/res` directory, you need
-to rerun this command, too:
-
-```shell
 build/common/generate-resources.sh
 ```
 
-From here you can start coding. If you want to build an installer, refer to the CI/CD pipeline in
-`.github/workflows/build.yml`. For example, if you want to build a DEB file, you'd need to execute 
-`pyinstaller installer/normal-build.spec` and then `./package-deb.sh`. 
-
-If you see this error on openSUSE with Qt 6.7.x:
-
-```
-No QtMultimedia backends found. Only QMediaDevices, QAudioDevice, QSoundEffect, QAudioSink, and QAudioSource are available.
-```
-
-then install `libatomic1`:
-
-```shell
-sudo zypper install libatomic1
-```
-
-### Building for Windows
-
-Consult the above section for details. In short, install Python 3.11. Then:
-
-```shell
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-```
-
-Generate resources:
-
-```shell
-cd res
-pyside6-rcc --project -o resources.qrc
-pyside6-rcc -g python resources.qrc -o "../src/fk/desktop/resources.py"
-```
-
-Package as a distributable / portable bundle (OPTIONAL):
-
-```shell
-pyinstaller installer\portable-build.spec
-pyinstaller installer\normal-build.spec
-```
-
-## Testing Flowkeeper
-
-To execute Flowkeeper:
+## 运行
 
 ```shell
 PYTHONPATH=src python -m fk.desktop.desktop
+# 或使用新增入口：
+PYTHONPATH=src python -m fk.desktop.Flowkeeper
 ```
 
-To run unit tests w/test coverage (install requirements from 
-`requirements.txt` or `requirements-test.txt` first):
+## 测试
 
 ```shell
 PYTHONPATH=src python -m coverage run -m unittest discover -v fk.tests
 python -m coverage html
-```
-
-To execute end-to-end tests:
-
-```shell
 PYTHONPATH=src python -m fk.desktop.desktop --e2e
 ```
 
-## Technical details
+## 技术文档
 
+参见 `doc/` 目录下的原项目设计文档：
 - [Design considerations](doc/design.md)
 - [Data model](doc/data-model.md)
 - [Strategies](doc/strategies.md)
@@ -126,9 +123,15 @@ PYTHONPATH=src python -m fk.desktop.desktop --e2e
 - [Building for Alpine Linux](doc/build-alpine.md)
 - [Building for FreeBSD](doc/build-freebsd.md)
 
+## 致谢
+
+本项目基于 [flowkeeper-org/fk-desktop](https://github.com/flowkeeper-org/fk-desktop)，
+感谢原作者 Constantine Kulak 及社区贡献者的工作。
+
 ## Copyright
 
-Copyright (c) 2023 - 2024 Constantine Kulak.
+Copyright (c) 2023 - 2024 Constantine Kulak（原项目作者）。
+本分支在原 GPL-3.0 许可证下继续发布，所有修改同样遵循 GPLv3。
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by

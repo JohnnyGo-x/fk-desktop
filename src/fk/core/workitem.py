@@ -107,6 +107,12 @@ class Workitem(AbstractDataContainer[Pomodoro, 'Backlog']):
         else:
             raise Exception(f'Invalid workitem state: {target_state}')
 
+    def unseal(self, when: datetime.datetime) -> None:
+        if not self.is_sealed():
+            raise Exception(f'Cannot unseal workitem in state {self._state}')
+        self._state = 'new'
+        self._date_work_ended = None
+
     def add_pomodoro(self,
                      num_pomodoros: int,
                      default_work_duration: float,

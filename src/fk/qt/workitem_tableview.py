@@ -16,7 +16,7 @@
 import logging
 
 from PySide6.QtCore import Qt, QModelIndex
-from PySide6.QtWidgets import QWidget, QHeaderView, QMenu, QMessageBox
+from PySide6.QtWidgets import QWidget, QHeaderView, QMenu, QMessageBox, QStyledItemDelegate, QLineEdit
 
 from fk.core.abstract_data_item import generate_unique_name, generate_uid
 from fk.core.abstract_event_source import AbstractEventSource, start_workitem
@@ -29,7 +29,7 @@ from fk.core.tag import Tag
 from fk.core.timer import PomodoroTimer
 from fk.core.timer_data import TimerData
 from fk.core.workitem import Workitem
-from fk.core.workitem_strategies import DeleteWorkitemStrategy, CreateWorkitemStrategy
+from fk.core.workitem_strategies import DeleteWorkitemStrategy, CreateWorkitemStrategy, ReopenWorkitemStrategy
 from fk.desktop.application import Application
 from fk.qt.abstract_tableview import AbstractTableView
 from fk.qt.actions import Actions
@@ -40,6 +40,33 @@ from fk.qt.workitem_state_delegate import WorkitemStateDelegate
 from fk.qt.workitem_text_delegate import WorkitemTextDelegate
 
 logger = logging.getLogger(__name__)
+
+
+class _WorkitemEditDelegate(QStyledItemDelegate):
+    def createEditor(self, parent, option, index):
+        editor = QLineEdit(parent)
+        editor.setMinimumHeight(32)
+        editor.setStyleSheet("""
+            QLineEdit {
+                padding: 6px 10px;
+                font-size: 13px;
+                border: 1px solid #007AFF;
+                border-radius: 6px;
+                background: white;
+                color: #000;
+                selection-background-color: #B4D8FE;
+            }
+        """)
+        return editor
+
+    def updateEditorGeometry(self, editor, option, index):
+        rect = option.rect
+        min_h = 32
+        if rect.height() < min_h:
+            y_offset = (min_h - rect.height()) // 2
+            editor.setGeometry(rect.x(), rect.y() - y_offset, rect.width(), min_h)
+        else:
+            editor.setGeometry(rect.x(), rect.y() + (rect.height() - min_h) // 2, rect.width(), min_h)
 
 
 class WorkitemTableView(AbstractTableView[Backlog | Tag, Workitem]):
@@ -66,6 +93,7 @@ class WorkitemTableView(AbstractTableView[Backlog | Tag, Workitem]):
         self._menu = self._init_menu(actions)
         source_holder.on(AfterSourceChanged, self._on_source_changed)
         self.update_actions(None)
+        self.setAlternatingRowColors(True)
         application.get_settings().on(AfterSettingsChanged, self._on_setting_changed)
         if timer is not None:
             timer.on(PomodoroTimer.TimerTick, self._on_tick)
@@ -104,7 +132,7 @@ class WorkitemTableView(AbstractTableView[Backlog | Tag, Workitem]):
                     self._application.get_theme_variables()['SELECTION_BG_COLOR'],
                     self._application.get_theme_variables()['TABLE_CROSSOUT_COLOR']))
         else:
-            self.setItemDelegateForColumn(1, None)
+            self.setItemDelegateForColumn(1, _WorkitemEditDelegate(self))
 
         # Pomodoros display
         self.setItemDelegateForColumn(
@@ -145,6 +173,7 @@ class WorkitemTableView(AbstractTableView[Backlog | Tag, Workitem]):
             actions['workitems_table.removePomodoro'],
             actions['workitems_table.hideCompleted'],
             actions['workitems_table.completeItem'],
+            actions['workitems_table.reopenItem'],
         ])
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.customContextMenuRequested.connect(lambda p: menu.exec(self.mapToGlobal(p)))
@@ -157,6 +186,7 @@ class WorkitemTableView(AbstractTableView[Backlog | Tag, Workitem]):
         actions.add('workitems_table.deleteItem', "Delete Item", 'Del', "tool-delete", WorkitemTableView.delete_selected_workitem)
         actions.add('workitems_table.startItem', "Start Item", 'Ctrl+S', "tool-start-item", WorkitemTableView.start_selected_workitem)
         actions.add('workitems_table.completeItem', "Complete Item", 'Ctrl+P', "tool-complete-item", WorkitemTableView.complete_selected_workitem)
+        actions.add('workitems_table.reopenItem', "Reopen Item", 'Ctrl+Shift+R', "tool-reopen", WorkitemTableView.reopen_selected_workitem)
         actions.add('workitems_table.addPomodoro', "Add Pomodoro", 'Ctrl++', "tool-add-pomodoro", WorkitemTableView.add_pomodoro)
         actions.add('workitems_table.removePomodoro', "Remove Pomodoro", 'Ctrl+-', "tool-remove-pomodoro", WorkitemTableView.remove_pomodoro)
         actions.add('workitems_table.hideCompleted',
@@ -184,6 +214,7 @@ class WorkitemTableView(AbstractTableView[Backlog | Tag, Workitem]):
                                                               and (selected.is_startable() or len(selected) == 0 or selected.is_tracker())
                                                               and self._source.get_data().get_current_user().get_timer().is_idling())
         self._actions['workitems_table.completeItem'].setEnabled(is_workitem_editable)
+        self._actions['workitems_table.reopenItem'].setEnabled(is_workitem_selected and selected.is_sealed())
         self._actions['workitems_table.addPomodoro'].setEnabled(is_workitem_editable and not is_tracker)
         self._actions['workitems_table.removePomodoro'].setEnabled(is_workitem_editable
                                                                    and selected.is_startable()
@@ -245,6 +276,12 @@ class WorkitemTableView(AbstractTableView[Backlog | Tag, Workitem]):
         selected: Workitem = self.get_current()
         complete_item(selected, self, self._source)
 
+    def reopen_selected_workitem(self) -> None:
+        selected: Workitem = self.get_current()
+        if selected is None:
+            raise Exception("Trying to reopen a workitem, while there's none selected")
+        self._source.execute(ReopenWorkitemStrategy, [selected.get_uid()])
+
     def add_pomodoro(self) -> None:
         selected: Workitem = self.get_current()
         if selected is None:
@@ -270,7 +307,7 @@ class WorkitemTableView(AbstractTableView[Backlog | Tag, Workitem]):
         self._source.set_config_parameters({'Application.hide_completed': str(checked)})
 
     def _resize(self) -> None:
-        self.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        self.setColumnHidden(0, True)
         self.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         self.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
 

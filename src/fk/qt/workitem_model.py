@@ -50,7 +50,7 @@ class WorkitemPlanned(QStandardItem):
         self.update_font(font)
 
     def update_planned(self):
-        self.setData('' if self._workitem.is_planned() else '*', Qt.ItemDataRole.DisplayRole)
+        self.setData('', Qt.ItemDataRole.DisplayRole)
         self.setData('Planned work item' if self._workitem.is_planned() else 'Unplanned work item', Qt.ItemDataRole.ToolTipRole)
 
     def update_font(self, font: QtGui.QFont):

@@ -404,3 +404,46 @@ class MoveWorkitemStrategy(AbstractStrategy[Tenant]):
         old_backlog.item_updated(self._when)
         workitem.item_updated(self._when)   # Update Backlog
         emit(events.AfterWorkitemMove, params, self._carry)
+
+
+# ReopenWorkitem("123-456-789")
+@strategy
+class ReopenWorkitemStrategy(AbstractStrategy[Tenant]):
+    _workitem_uid: str
+
+    def get_workitem_uid(self) -> str:
+        return self._workitem_uid
+
+    def __init__(self,
+                 seq: int,
+                 when: datetime.datetime,
+                 user_identity: str,
+                 params: list[str],
+                 settings: AbstractSettings,
+                 carry: any = None):
+        super().__init__(seq, when, user_identity, params, settings, carry)
+        self._workitem_uid = params[0]
+
+    def execute(self,
+                emit: Callable[[str, dict[str, any], any], None],
+                data: Tenant) -> None:
+        workitem: Workitem | None = None
+        user: User = data[self._user_identity]
+        for backlog in user.values():
+            if self._workitem_uid in backlog:
+                workitem = backlog[self._workitem_uid]
+                break
+
+        if workitem is None:
+            raise Exception(f'Workitem "{self._workitem_uid}" not found')
+
+        if not workitem.is_sealed():
+            raise Exception(f'Cannot reopen unsealed workitem "{self._workitem_uid}"')
+
+        params = {
+            'workitem': workitem,
+        }
+        emit(events.BeforeWorkitemReopen, params, self._carry)
+        workitem.unseal(self._when)
+        workitem.item_updated(self._when)
+        emit(events.AfterWorkitemReopen, params, self._carry)

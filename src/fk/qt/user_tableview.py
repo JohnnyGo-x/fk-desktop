@@ -43,6 +43,7 @@ class UserTableView(AbstractTableView[Tenant, User]):
                          0)
         source_holder.on(AfterSourceChanged, self._on_source_changed)
         self.update_actions(None)
+        self.setAlternatingRowColors(True)
 
     def _on_source_changed(self, event: str, source: AbstractEventSource) -> None:
         super()._on_source_changed(event, source)

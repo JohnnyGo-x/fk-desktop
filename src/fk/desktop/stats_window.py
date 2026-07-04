@@ -21,14 +21,17 @@ from PySide6 import QtUiTools
 from PySide6.QtCharts import QChart, QBarSet, QBarCategoryAxis, QValueAxis, QChartView, QStackedBarSeries
 from PySide6.QtCore import Qt, QObject, QFile, QMargins
 from PySide6.QtGui import QAction, QPainter, QColor, QFont
-from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QLabel, QToolButton
+from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QLabel, QToolButton, QHBoxLayout, QScrollArea
 
 from fk.core.abstract_event_source import AbstractEventSource
 from fk.core.pomodoro import POMODORO_TYPE_NORMAL
+from fk.qt.calendar_widget import CalendarWidget
+from fk.qt.timeline_widget import TimelineWidget, TimelineEntry
 
 
 class StatsWindow(QObject):
     _chart: QChart
+    _chart_view: QChartView
     _source: AbstractEventSource
     _stats_window: QMainWindow
     _header_text: QLabel
@@ -49,6 +52,10 @@ class StatsWindow(QObject):
     _color_primary: QColor
     _color_secondary: QColor
 
+    _day_container: QWidget
+    _calendar: CalendarWidget
+    _timeline: TimelineWidget
+
     def __init__(self,
                  parent: QWidget,
                  header_font: QFont,
@@ -56,7 +63,7 @@ class StatsWindow(QObject):
                  source: AbstractEventSource):
         super().__init__(parent)
         self._source = source
-        self._period = 'week'
+        self._period = 'day'
         self._reset_to(self._period)
         self._init_colors(theme_variables)
 
@@ -79,7 +86,7 @@ class StatsWindow(QObject):
             'week': self._create_checkable_action('week', 'Ctrl+W'),
             'day': self._create_checkable_action('day', 'Ctrl+D'),
         }
-        self._period_actions['week'].setChecked(True)
+        self._period_actions['day'].setChecked(True)
         self._prev_action = self._create_simple_action('prev', self._prev)
         self._prev_action.setShortcut('Left')
         self._next_action = self._create_simple_action('next', self._next)
@@ -103,24 +110,53 @@ class StatsWindow(QObject):
         axis_y.setLabelFormat('%d')
         chart.addAxis(axis_x, Qt.AlignmentFlag.AlignBottom)
         chart.addAxis(axis_y, Qt.AlignmentFlag.AlignLeft)
-        self._series = QStackedBarSeries(self)    # or QBarSeries
+        self._series = QStackedBarSeries(self)
         chart.addSeries(self._series)
         self._series.attachAxis(self._axis_x)
         self._series.attachAxis(self._axis_y)
         chart.legend().setAlignment(Qt.AlignmentFlag.AlignBottom)
         chart.setMargins(QMargins(10, 0, 10, 0))
 
-        self._update_chart('week', self._to)
-
         # noinspection PyTypeChecker
         layout: QVBoxLayout = self._stats_window.findChild(QVBoxLayout, "statsGraph")
         view = QChartView(chart, self._stats_window)
         view.setObjectName('statsView')
         view.setRenderHint(QPainter.RenderHint.Antialiasing)
+        self._chart_view = view
 
         chart.setBackgroundVisible(False)
         chart.setPlotAreaBackgroundVisible(False)
         layout.addWidget(view)
+
+        # Day view container (calendar + timeline)
+        self._day_container = QWidget(self._stats_window)
+        self._day_container.setObjectName('statsView')
+        day_layout = QHBoxLayout(self._day_container)
+        day_layout.setContentsMargins(15, 10, 15, 10)
+        day_layout.setSpacing(15)
+
+        self._calendar = CalendarWidget(theme_variables, self._day_container)
+        day_layout.addWidget(self._calendar, 1)
+
+        self._timeline_scroll = QScrollArea(self._day_container)
+        self._timeline_scroll.setWidgetResizable(True)
+        self._timeline_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        self._timeline_inner = QWidget()
+        self._timeline_inner.setObjectName('statsView')
+        tl_layout = QVBoxLayout(self._timeline_inner)
+        tl_layout.setContentsMargins(0, 0, 0, 0)
+        self._timeline = TimelineWidget(theme_variables, self._timeline_inner)
+        tl_layout.addWidget(self._timeline)
+        self._timeline_scroll.setWidget(self._timeline_inner)
+        day_layout.addWidget(self._timeline_scroll, 2)
+
+        layout.addWidget(self._day_container)
+        self._day_container.setVisible(False)
+
+        self._calendar.dateSelected.connect(self._on_date_selected)
+        self._calendar.monthChanged.connect(self._on_month_changed)
+
+        self._update_chart('day', self._to)
 
     def _init_colors(self, theme_variables: dict[str, str]) -> None:
         self._color_primary = QColor(theme_variables['TABLE_TEXT_COLOR'])
@@ -187,42 +223,36 @@ class StatsWindow(QObject):
 
     @staticmethod
     def _drop_time(date: datetime.datetime, period: str, start: bool):
+        tz = date.tzinfo
         if period == 'week':
-            return datetime.datetime(date.year,
-                                     date.month,
-                                     date.day,
-                                     0 if start else 23,
-                                     0 if start else 59,
-                                     0 if start else 59,
-                                     tzinfo=date.tzinfo)
+            monday = date - datetime.timedelta(days=date.weekday())
+            base = monday if start else (monday + datetime.timedelta(days=6))
+            if start:
+                return datetime.datetime(base.year, base.month, base.day, 0, 0, 0, tzinfo=tz)
+            return datetime.datetime(base.year, base.month, base.day, 23, 59, 59, tzinfo=tz)
         elif period == 'year':
-            return datetime.datetime(date.year,
-                                     date.month,
-                                     monthrange(date.year, date.month)[1],
-                                     0 if start else 23,
-                                     0 if start else 59,
-                                     0 if start else 59,
-                                     tzinfo=date.tzinfo)
+            if start:
+                return datetime.datetime(date.year, 1, 1, 0, 0, 0, tzinfo=tz)
+            return datetime.datetime(date.year, 12, 31, 23, 59, 59, tzinfo=tz)
         elif period == 'day':
-            return datetime.datetime(date.year,
-                                     date.month,
-                                     date.day,
-                                     date.hour,
-                                     0 if start else 59,
-                                     tzinfo=date.tzinfo)
+            if start:
+                return datetime.datetime(date.year, date.month, date.day, 0, 0, 0, tzinfo=tz)
+            return datetime.datetime(date.year, date.month, date.day, 23, 59, 59, tzinfo=tz)
         elif period == 'month':
-            return datetime.datetime(date.year,
-                                     date.month,
-                                     date.day,
-                                     0 if start else 23,
-                                     0 if start else 59,
-                                     0 if start else 59,
-                                     tzinfo=date.tzinfo)
+            last_day = monthrange(date.year, date.month)[1]
+            if start:
+                return datetime.datetime(date.year, date.month, 1, 0, 0, 0, tzinfo=tz)
+            return datetime.datetime(date.year, date.month, last_day, 23, 59, 59, tzinfo=tz)
         elif period == 'month6':
-            return datetime.datetime(date.year,
-                                     date.month,
-                                     monthrange(date.year, date.month)[1],
-                                     tzinfo=date.tzinfo)
+            last_day = monthrange(date.year, date.month)[1]
+            if start:
+                year = date.year
+                month = date.month - 5
+                while month < 1:
+                    month += 12
+                    year -= 1
+                return datetime.datetime(year, month, 1, 0, 0, 0, tzinfo=tz)
+            return datetime.datetime(date.year, date.month, last_day, 23, 59, 59, tzinfo=tz)
         else:
             raise Exception(f'Unexpected period: {period}')
 
@@ -241,21 +271,35 @@ class StatsWindow(QObject):
             raise Exception(f'Unexpected period: {period}')
 
     def _prev(self):
+        if self._period == 'day':
+            self._calendar.prev_month()
+            return
         self._to = StatsWindow._drop_time(self._to, self._period, False)
-        self._to += self._substep_delta_for_period(self._period, self._to, True)
+        self._to += self._time_delta_for_period(self._period, self._to, True)
         self._update_chart(self._period, self._to)
 
     def _next(self):
+        if self._period == 'day':
+            self._calendar.next_month()
+            return
         self._to = StatsWindow._drop_time(self._to, self._period, False)
-        self._to += self._substep_delta_for_period(self._period, self._to, False)
+        self._to += self._time_delta_for_period(self._period, self._to, False)
         self._update_chart(self._period, self._to)
 
     @staticmethod
     def _format_date(date: datetime.datetime):
-        return date.strftime('%d %b %Y, %H:%M')
+        return date.strftime('%Y-%m-%d')
 
     def _update_chart(self, period: str, to: datetime.datetime) -> None:
         self._period = period
+
+        if period == 'day':
+            self._show_day_view(to)
+            return
+
+        self._chart_view.setVisible(True)
+        self._day_container.setVisible(False)
+
         _from: datetime.datetime = (to +
                                     self._time_delta_for_period(period, to, True) +
                                     datetime.timedelta(minutes=1))
@@ -294,6 +338,107 @@ class StatsWindow(QObject):
 
         self._style_chart()
 
+    def _show_day_view(self, to: datetime.datetime) -> None:
+        self._chart_view.setVisible(False)
+        self._day_container.setVisible(True)
+
+        year, month = to.year, to.month
+        self._calendar.set_year_month(year, month)
+
+        selected_date = to.date()
+        self._calendar.set_selected(selected_date)
+
+        active_days, entries = self._collect_day_data(year, month, selected_date)
+        self._calendar.set_active_days(active_days)
+        self._timeline.set_entries(entries)
+
+        self._header_text.setText(f'{selected_date.strftime("%Y-%m-%d")}')
+        completed = sum(1 for e in entries if e.state == 'finished')
+        total = len(entries)
+        if total > 0:
+            self._header_subtext.setText(f'当天共 {total} 个番茄钟，其中 {completed} 个已完成')
+        else:
+            self._header_subtext.setText('当天无番茄钟记录')
+
+    def _collect_day_data(self, year: int, month: int, selected_date: datetime.date):
+        active_days: set[datetime.date] = set()
+        entries: list[TimelineEntry] = []
+
+        for p in self._source.pomodoros():
+            if p.get_type() != POMODORO_TYPE_NORMAL:
+                continue
+
+            finished = p.is_finished()
+            canceled = False
+            for interruption in p.values():
+                if interruption.is_void():
+                    canceled = True
+
+            if finished or canceled:
+                when = p.get_last_modified_date().astimezone()
+            else:
+                when = p.get_create_date().astimezone()
+            if when is None:
+                continue
+
+            if when.year == year and when.month == month:
+                active_days.add(when.date())
+
+            if when.date() == selected_date:
+                start = p.get_work_start_date()
+                if start is not None:
+                    start = start.astimezone()
+                else:
+                    start = when
+
+                if finished:
+                    end = p.get_last_modified_date().astimezone()
+                    state = 'finished'
+                elif canceled:
+                    end = p.get_last_modified_date().astimezone()
+                    state = 'voided'
+                elif p.is_running():
+                    end = None
+                    state = 'running'
+                else:
+                    end = None
+                    state = 'new'
+
+                title = p.get_parent().get_display_name()
+                entries.append(TimelineEntry(
+                    start=start,
+                    end=end,
+                    title=title,
+                    state=state,
+                    is_planned=p.is_planned(),
+                ))
+
+        return active_days, entries
+
+    def _on_date_selected(self, d: datetime.date) -> None:
+        self._calendar.set_selected(d)
+        active_days, entries = self._collect_day_data(d.year, d.month, d)
+        self._calendar.set_active_days(active_days)
+        self._timeline.set_entries(entries)
+
+        self._header_text.setText(f'{d.strftime("%Y-%m-%d")}')
+        completed = sum(1 for e in entries if e.state == 'finished')
+        total = len(entries)
+        if total > 0:
+            self._header_subtext.setText(f'当天共 {total} 个番茄钟，其中 {completed} 个已完成')
+        else:
+            self._header_subtext.setText('当天无番茄钟记录')
+
+    def _on_month_changed(self, year: int, month: int) -> None:
+        selected = self._calendar.get_selected()
+        if selected is not None and selected.year == year and selected.month == month:
+            active_days, entries = self._collect_day_data(year, month, selected)
+        else:
+            active_days, _ = self._collect_day_data(year, month, datetime.date(year, month, 1))
+            entries = []
+        self._calendar.set_active_days(active_days)
+        self._timeline.set_entries(entries)
+
     def _create_checkable_action(self, name: str, shortcut: str) -> QAction:
         # noinspection PyTypeChecker
         button: QToolButton = self._stats_window.findChild(QToolButton, name)
@@ -329,19 +474,23 @@ class StatsWindow(QObject):
     def extract_data(self, group: str, period_from: datetime.datetime, period_to: datetime.datetime):
         if group == 'week':
             cats = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-            rotate_around = period_to.weekday()
         elif group == 'year':
             cats = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-            rotate_around = period_to.month - 1
         elif group == 'day':
             cats = [str(i) for i in range(24)]
-            rotate_around = period_to.hour
         elif group == 'month':
-            cats = [str(i + 1) for i in range(31)]
-            rotate_around = period_to.day - 1
+            last_day = monthrange(period_to.year, period_to.month)[1]
+            cats = [str(i + 1) for i in range(last_day)]
         elif group == 'month6':
-            cats = [str(i + 1) for i in range(53)]
-            rotate_around = period_to.isocalendar()[1] - 1
+            cats = []
+            year = period_from.year
+            month = period_from.month
+            for _ in range(6):
+                cats.append(f'{year}-{month:02d}')
+                month += 1
+                if month > 12:
+                    month = 1
+                    year += 1
         else:
             raise Exception(f'Grouping by {group} is not implemented')
 
@@ -379,7 +528,14 @@ class StatsWindow(QObject):
             elif group == 'month':
                 index = when.day - 1
             elif group == 'month6':
-                index = when.isocalendar()[1] - 1
+                months_from_start = (when.year - period_from.year) * 12 + (when.month - period_from.month)
+                if 0 <= months_from_start < 6:
+                    index = months_from_start
+                else:
+                    continue
+
+            if index < 0 or index >= len(cats):
+                continue
 
             if finished:
                 list_finished[index] += 1
@@ -389,21 +545,7 @@ class StatsWindow(QObject):
                 list_ready[index] += 1
             list_total[index] += 1
 
-        r = [StatsWindow._rotate(cats, rotate_around),
-             StatsWindow._rotate(list_finished, rotate_around),
-             StatsWindow._rotate(list_canceled, rotate_around),
-             StatsWindow._rotate(list_ready, rotate_around),
-             StatsWindow._rotate(list_total, rotate_around)]
-
-        if group == 'month6':
-            # Truncate to half a year
-            r[0] = r[0][26:]
-            r[1] = r[1][26:]
-            r[2] = r[2][26:]
-            r[3] = r[3][26:]
-            r[4] = r[4][26:]
-
-        return r
+        return [cats, list_finished, list_canceled, list_ready, list_total]
 
     def show(self):
         self._stats_window.show()

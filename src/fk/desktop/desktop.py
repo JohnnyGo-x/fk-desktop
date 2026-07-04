@@ -51,6 +51,7 @@ from fk.qt.tray_icon import TrayIcon
 from fk.qt.user_tableview import UserTableView
 from fk.qt.workitem_tableview import WorkitemTableView
 from fk.qt.workitem_widget import WorkitemWidget
+from fk.qt.today_plan_widget import TodayPlanWidget
 
 logger = logging.getLogger(__name__)
 
@@ -227,7 +228,7 @@ class MainWindow:
                     raise Exception("Focus widget is detached, this should never happen. Please open a bug in GitHub.")
 
     def show_search(self):
-        search.show()
+        pass
 
     def show_tutorial(self):
         global tutorial
@@ -247,6 +248,23 @@ class MainWindow:
 
     def toggle_users(self, enabled):
         settings.set({'Application.users_visible': str(enabled)})
+
+    def toggle_today_plan(self, state: bool):
+        global today_plan_widget, right_layout, left_table_layout
+        for i in range(right_layout.count()):
+            item = right_layout.itemAt(i)
+            w = item.widget() if item is not None else None
+            if w is not None and w is not today_plan_widget:
+                w.setVisible(not state)
+        if state:
+            left_table_layout.setVisible(False)
+        else:
+            users_visible = (settings.get('Application.users_visible') == 'True')
+            backlogs_visible = (settings.get('Application.backlogs_visible') == 'True')
+            left_table_layout.setVisible(users_visible or backlogs_visible)
+        today_plan_widget.setVisible(state)
+        if state:
+            today_plan_widget.refresh()
 
     @staticmethod
     def define_actions(actions: Actions):
@@ -275,6 +293,14 @@ class MainWindow:
                     MainWindow.toggle_users,
                     True,
                     actions.get_settings().is_team_supported() and users_were_visible)
+
+        actions.add('window.todayPlan',
+                    "Today Plan",
+                    '',
+                    'tool-today',
+                    MainWindow.toggle_today_plan,
+                    True,
+                    False)
 
 
 if __name__ == "__main__":
@@ -382,17 +408,14 @@ if __name__ == "__main__":
                                                           actions)
         right_layout.addWidget(workitems_widget)
 
+        today_plan_widget = TodayPlanWidget(app.get_theme_variables(), app.get_source_holder(), window)
+        today_plan_widget.setVisible(False)
+        right_layout.addWidget(today_plan_widget)
+
         progress_widget = ProgressWidget(window, app.get_source_holder())
         right_layout.addWidget(progress_widget)
 
-        # noinspection PyTypeChecker
-        search_bar: QtWidgets.QHBoxLayout = window.findChild(QtWidgets.QHBoxLayout, "searchBar")
-        search = SearchBar(window,
-                           app.get_source_holder(),
-                           actions,
-                           backlogs_widget.get_table(),
-                           workitems_widget.get_table())
-        search_bar.addWidget(search)
+        # Search bar removed - do not create SearchBar
 
         # noinspection PyTypeChecker
         root_layout_widget: QtWidgets.QWidget = window.findChild(QtWidgets.QWidget, "rootLayout")
@@ -492,12 +515,30 @@ if __name__ == "__main__":
         # noinspection PyTypeChecker
         tool_backlogs: QtWidgets.QToolButton = window.findChild(QtWidgets.QToolButton, "toolBacklogs")
         tool_backlogs.setDefaultAction(action_backlogs)
+        tool_backlogs.setVisible(False)
 
         # noinspection PyTypeChecker
         tool_teams: QtWidgets.QToolButton = window.findChild(QtWidgets.QToolButton, "toolTeams")
         tool_teams.setDefaultAction(action_teams)
         action_teams.setEnabled(settings.is_team_supported())
         tool_teams.setVisible(settings.is_team_supported())
+
+        # noinspection PyTypeChecker
+        tool_stats: QtWidgets.QToolButton = window.findChild(QtWidgets.QToolButton, "toolStats")
+        tool_stats.setDefaultAction(actions['application.stats'])
+        tool_stats.setIcon(QIcon.fromTheme('tool-stats'))
+        tool_stats.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
+
+        # noinspection PyTypeChecker
+        tool_today: QtWidgets.QToolButton = window.findChild(QtWidgets.QToolButton, "toolToday")
+        tool_today.setDefaultAction(actions['window.todayPlan'])
+        tool_today.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
+
+        # noinspection PyTypeChecker
+        tool_tasks: QtWidgets.QToolButton = window.findChild(QtWidgets.QToolButton, "toolTasks")
+        tool_tasks.setIcon(QIcon.fromTheme('tool-tasks'))
+        tool_tasks.setToolTip('Tasks')
+        tool_tasks.clicked.connect(lambda: actions['window.todayPlan'].setChecked(False))
 
         # noinspection PyTypeChecker
         tool_settings: QtWidgets.QToolButton = window.findChild(QtWidgets.QToolButton, "toolSettings")
@@ -507,6 +548,8 @@ if __name__ == "__main__":
         ))
 
         # Restore window config from settings
+        if settings.get('Application.backlogs_visible') != 'True':
+            settings.set({'Application.backlogs_visible': 'True'})
         update_tables_visibility()
 
         resize_event_filter = ResizeEventFilter(window, main_layout, settings)
@@ -533,6 +576,8 @@ if __name__ == "__main__":
 
         if not app.is_hide_on_start():
             window.show()
+
+        actions['window.todayPlan'].setChecked(True)
 
         # With Qt 6.7.1 on Windows this needs to happen AFTER the Window is shown.
         # Otherwise, the font size for the focus' header is picked correctly, but

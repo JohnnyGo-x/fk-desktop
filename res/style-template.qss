@@ -35,12 +35,15 @@ QMainWindow, #StatsWindow, #FocusBackground {
 }
 
 #search {
-    padding-left: 20px;
-    padding-top: 3px;
-    padding-bottom: 3px;
+    padding-left: 24px;
+    padding-top: 6px;
+    padding-bottom: 6px;
+    padding-right: 10px;
     background: no-repeat left url(:/icons/$ICON_THEME/24x24/tool-search.svg);
     color: $TABLE_TEXT_COLOR;
-    background-color: $PRIMARY_BG_COLOR;
+    background-color: $SECONDARY_BG_COLOR;
+    border: 1px solid $BORDER_COLOR;
+    border-radius: 8px;
 }
 
 #left_toolbar {
@@ -56,10 +59,21 @@ QMainWindow, #StatsWindow, #FocusBackground {
     padding: 10px;
 }
 
+#workitems_table::item, #users_table::item, #backlogs_table::item {
+    padding: 10px 14px;
+    border-radius: 0px;
+    border: none;
+}
+
+#workitems_table::item:hover, #users_table::item:hover, #backlogs_table::item:hover {
+    background-color: $HOVER_BG_COLOR;
+}
+
 #workitems_table::item:selected, #users_table::item:selected, #backlogs_table::item:selected, #workitems_table QLineEdit {
     color: $TABLE_TEXT_COLOR;
     background-color: $SELECTION_BG_COLOR;
     border: none;
+    border-radius: 0px;
 }
 
 #users_table, #tags_table {
@@ -78,13 +92,25 @@ QMainWindow, #StatsWindow, #FocusBackground {
 
 #workitems_table {
     background-color: $PRIMARY_BG_COLOR;
-    padding: 10px 10px 10px 8px;
+    padding: 4px 0px 4px 0px;
+    gridline-color: transparent;
+    show-decoration-selected: 1;
+}
+
+#backlogs_table, #users_table {
+    background-color: $SECONDARY_BG_COLOR;
 }
 
 QToolButton {
     background: none;
-    border-radius: 5px;
+    border-radius: $TOOLBAR_RADIUS;
     color: $TABLE_TEXT_COLOR;
+    padding: 6px;
+    margin: 2px;
+}
+
+QToolButton:hover {
+    background-color: $HOVER_BG_COLOR;
 }
 
 #toolBacklogs:checked {
@@ -97,13 +123,39 @@ QToolButton:checked {
     color: $FOCUS_TEXT_COLOR;
 }
 
-QScrollBar {
-    height: 0px;
-    width: 0px;
+QScrollBar:vertical {
+    background: transparent;
+    width: 8px;
+    margin: 0;
+}
+QScrollBar::handle:vertical {
+    background: $BORDER_COLOR;
+    border-radius: 4px;
+    min-height: 30px;
+}
+QScrollBar::handle:vertical:hover {
+    background: $TABLE_CROSSOUT_COLOR;
+}
+QScrollBar::add-line, QScrollBar::sub-line { height: 0; }
+QScrollBar::add-page, QScrollBar::sub-page { background: transparent; }
+
+QScrollBar:horizontal {
+    background: transparent;
+    height: 8px;
+    margin: 0;
+}
+QScrollBar::handle:horizontal {
+    background: $BORDER_COLOR;
+    border-radius: 4px;
+    min-width: 30px;
+}
+QScrollBar::handle:horizontal:hover {
+    background: $TABLE_CROSSOUT_COLOR;
 }
 
 QSplitter::handle {
     background-color: $PRIMARY_BG_COLOR;
+    width: 1px;
 }
 
 InfoOverlayContent {

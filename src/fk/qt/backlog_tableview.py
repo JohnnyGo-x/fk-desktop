@@ -18,7 +18,10 @@ import logging
 
 from PySide6.QtCore import Qt, QModelIndex
 from PySide6.QtGui import QDragMoveEvent, QDragEnterEvent
-from PySide6.QtWidgets import QWidget, QHeaderView, QMenu, QMessageBox, QInputDialog, QTableView, QAbstractItemView
+from PySide6.QtWidgets import (
+    QWidget, QHeaderView, QMenu, QMessageBox, QInputDialog, QTableView, QAbstractItemView,
+    QStyledItemDelegate, QLineEdit,
+)
 
 from fk.core import events
 from fk.core.abstract_data_item import generate_unique_name, generate_uid
@@ -38,6 +41,33 @@ from fk.qt.actions import Actions
 from fk.qt.backlog_model import BacklogModel
 
 logger = logging.getLogger(__name__)
+
+
+class _BacklogEditDelegate(QStyledItemDelegate):
+    def createEditor(self, parent, option, index):
+        editor = QLineEdit(parent)
+        editor.setMinimumHeight(32)
+        editor.setStyleSheet("""
+            QLineEdit {
+                padding: 6px 10px;
+                font-size: 13px;
+                border: 1px solid #007AFF;
+                border-radius: 6px;
+                background: white;
+                color: #000;
+                selection-background-color: #B4D8FE;
+            }
+        """)
+        return editor
+
+    def updateEditorGeometry(self, editor, option, index):
+        rect = option.rect
+        min_h = 32
+        if rect.height() < min_h:
+            y_offset = (min_h - rect.height()) // 2
+            editor.setGeometry(rect.x(), rect.y() - y_offset, rect.width(), min_h)
+        else:
+            editor.setGeometry(rect)
 
 
 class BacklogTableView(AbstractTableView[User, Backlog]):
@@ -65,6 +95,8 @@ class BacklogTableView(AbstractTableView[User, Backlog]):
         }))
         self._application = application
         self.update_actions(None)
+        self.setAlternatingRowColors(True)
+        self.setItemDelegate(_BacklogEditDelegate(self))
 
     def _lock_ui(self, event, after: int, last_received: datetime.datetime) -> None:
         self.update_actions(self.get_current())

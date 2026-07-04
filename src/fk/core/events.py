@@ -47,6 +47,8 @@ BeforeWorkitemReorder = "BeforeWorkitemReorder"
 AfterWorkitemReorder = "AfterWorkitemReorder"
 BeforeWorkitemMove = "BeforeWorkitemMove"
 AfterWorkitemMove = "AfterWorkitemMove"
+BeforeWorkitemReopen = "BeforeWorkitemReopen"
+AfterWorkitemReopen = "AfterWorkitemReopen"
 
 BeforePomodoroAdd = "BeforePomodoroAdd"
 AfterPomodoroAdd = "AfterPomodoroAdd"
