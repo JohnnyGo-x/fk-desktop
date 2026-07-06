@@ -109,6 +109,14 @@ QToolButton {
     margin: 2px;
 }
 
+QToolBar {
+    background-color: $TOOLBAR_BG_COLOR;
+    border: none;
+    spacing: 0px;
+    min-height: 36px;
+    max-height: 36px;
+}
+
 QToolButton:hover {
     background-color: $HOVER_BG_COLOR;
 }

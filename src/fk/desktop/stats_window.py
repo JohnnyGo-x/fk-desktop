@@ -165,11 +165,9 @@ class StatsWindow(QObject):
 
     def _style_chart(self) -> None:
         self._bars['finished'].setColor(QColor('dodgerblue'))
-        self._bars['startable'].setColor(QColor('lightgray'))
         self._bars['canceled'].setColor(QColor('orangered'))
 
         self._bars['finished'].setBorderColor(self._color_highlight)
-        self._bars['startable'].setBorderColor(self._color_highlight)
         self._bars['canceled'].setBorderColor(self._color_highlight)
 
         self._chart.legend().setLabelColor(self._color_primary)
@@ -309,7 +307,7 @@ class StatsWindow(QObject):
         d = self.extract_data(period, _from, to)
 
         completed_count = sum(d[1])
-        total_count = completed_count + sum(d[2]) + sum(d[3])
+        total_count = completed_count + sum(d[2])
         if total_count > 0:
             completion = round(100 * completed_count / total_count)
             header_text = f'Completed {completed_count} out of {total_count} ({completion}%)'
@@ -324,17 +322,14 @@ class StatsWindow(QObject):
         self._bars = {
             'finished': QBarSet("Completed", self),
             'canceled': QBarSet("Voided", self),
-            'startable': QBarSet("Not started", self),
         }
 
         self._series.clear()
         self._series.append(self._bars['finished'])
         self._series.append(self._bars['canceled'])
-        self._series.append(self._bars['startable'])
 
         [self._bars['finished'].append(i) for i in d[1]]
         [self._bars['canceled'].append(i) for i in d[2]]
-        [self._bars['startable'].append(i) for i in d[3]]
 
         self._style_chart()
 
@@ -373,11 +368,9 @@ class StatsWindow(QObject):
             for interruption in p.values():
                 if interruption.is_void():
                     canceled = True
-
-            if finished or canceled:
-                when = p.get_last_modified_date().astimezone()
-            else:
-                when = p.get_create_date().astimezone()
+            if not finished and not canceled:
+                continue
+            when = p.get_last_modified_date().astimezone()
             if when is None:
                 continue
 
@@ -397,12 +390,6 @@ class StatsWindow(QObject):
                 elif canceled:
                     end = p.get_last_modified_date().astimezone()
                     state = 'voided'
-                elif p.is_running():
-                    end = None
-                    state = 'running'
-                else:
-                    end = None
-                    state = 'new'
 
                 title = p.get_parent().get_display_name()
                 entries.append(TimelineEntry(
@@ -508,10 +495,9 @@ class StatsWindow(QObject):
             for interruption in p.values():
                 if interruption.is_void():
                     canceled = True
-            if finished or canceled:
-                when = p.get_last_modified_date().astimezone()
-            else:
-                when = p.get_create_date().astimezone()
+            if not finished and not canceled:
+                continue
+            when = p.get_last_modified_date().astimezone()
             if when is None:
                 continue
 
@@ -541,8 +527,6 @@ class StatsWindow(QObject):
                 list_finished[index] += 1
             elif canceled:
                 list_canceled[index] += 1
-            else:
-                list_ready[index] += 1
             list_total[index] += 1
 
         return [cats, list_finished, list_canceled, list_ready, list_total]

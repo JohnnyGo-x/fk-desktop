@@ -182,6 +182,7 @@ class AbstractSettings(AbstractEventEmitter, ABC):
                 ('Application.feature_connect', 'bool', 'Enable Connect feature', 'False', [], _never_show),
                 ('Application.feature_keyring', 'bool', 'Enable Keyring feature', 'False', [], _never_show),
                 ('Application.work_summary_settings', 'str', 'Work Summary UI settings', '{}', [], _never_show),
+                ('Application.today_plan_settings', 'str', 'Today Plan state', '{}', [], _never_show),
                 ('Application.last_version', 'str', 'Last Flowkeeper version', '0.0.1', [], _never_show),
             ],
             'Series and breaks': [
@@ -286,7 +287,7 @@ class AbstractSettings(AbstractEventEmitter, ABC):
                 ('Application.eyecandy_gradient_generate', 'button', 'Surprise me!', '', [], _show_for_gradient_eyecandy),
                 ('Application.window_width', 'int', 'Main window width', '700', [5, 5000], _never_show),
                 ('Application.window_height', 'int', 'Main window height', '500', [5, 5000], _never_show),
-                ('Application.window_splitter_width', 'int', 'Splitter width', '200', [0, 5000], _never_show),
+                ('Application.window_splitter_width', 'int', 'Splitter width', '260', [0, 5000], _never_show),
                 ('Application.backlogs_visible', 'bool', 'Show backlogs', 'True', [], _never_show),
                 ('Application.users_visible', 'bool', 'Show users', 'False', [], _never_show),
                 ('Application.last_selected_backlog', 'str', 'Last selected backlog', '', [], _never_show),

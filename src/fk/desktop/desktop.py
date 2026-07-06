@@ -263,8 +263,6 @@ class MainWindow:
             backlogs_visible = (settings.get('Application.backlogs_visible') == 'True')
             left_table_layout.setVisible(users_visible or backlogs_visible)
         today_plan_widget.setVisible(state)
-        if state:
-            today_plan_widget.refresh()
 
     @staticmethod
     def define_actions(actions: Actions):

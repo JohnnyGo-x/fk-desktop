@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import datetime
+import json
 import logging
 
-from PySide6.QtCore import Qt, QSize, QRectF, Signal
+from PySide6.QtCore import Qt, QSize, QRectF, Signal, QTimer
 from PySide6.QtGui import QColor, QFont, QPalette, QPainter, QBrush, QPen
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QScrollArea, QFrame,
@@ -12,9 +13,10 @@ from PySide6.QtWidgets import (
 )
 
 from fk.core.abstract_event_source import AbstractEventSource, start_workitem
+from fk.core.abstract_settings import AbstractSettings
 from fk.core.event_source_holder import EventSourceHolder, AfterSourceChanged
 from fk.core.pomodoro import POMODORO_TYPE_NORMAL
-from fk.core.events import SourceMessagesProcessed
+from fk.core.events import SourceMessagesProcessed, AfterPomodoroComplete, AfterPomodoroVoided, TimerWorkComplete, TimerRestComplete
 from fk.qt.timeline_widget import TimelineWidget, TimelineEntry
 
 logger = logging.getLogger(__name__)
@@ -146,6 +148,11 @@ class PieChartWidget(QWidget):
         self._text_color = text_color
         self.setFixedSize(44, 44)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+
+    def update_data(self, done: int, total: int) -> None:
+        self._done = done
+        self._total = total
+        self.update()
 
     def paintEvent(self, event):
         painter = QPainter(self)
@@ -564,6 +571,7 @@ class ReviewDialog(QDialog):
 
 class TodayPlanWidget(QWidget):
     _source: AbstractEventSource
+    _settings: AbstractSettings
     _theme: dict[str, str]
     _timeline: TimelineWidget
     _subheader_label: QLabel
@@ -577,14 +585,22 @@ class TodayPlanWidget(QWidget):
     _dim_color: QColor
     _border_color: QColor
     _accent_color: QColor
+    _card_widgets: dict[str, QWidget]
+    _hint_widget: QWidget | None
+    _refresh_timer: QTimer
+    _refresh_pending: bool
 
     def __init__(self, theme_variables: dict[str, str], source_holder: EventSourceHolder, parent=None):
         super().__init__(parent)
         self.setObjectName('today_plan_widget')
         self._theme = theme_variables
         self._source = None
+        self._settings = source_holder.get_settings()
         self._plan_state = {}
         self._has_planned = False
+        self._card_widgets = {}
+        self._hint_widget = None
+        self._refresh_pending = False
 
         self._primary_bg = QColor(theme_variables.get('PRIMARY_BG_COLOR', '#ffffff'))
         self._secondary_bg = QColor(theme_variables.get('SECONDARY_BG_COLOR', '#f5f7fa'))
@@ -724,14 +740,41 @@ class TodayPlanWidget(QWidget):
         columns.addWidget(right_col, 1)
         outer.addLayout(columns, 1)
 
+        self._refresh_timer = QTimer(self)
+        self._refresh_timer.setSingleShot(True)
+        self._refresh_timer.timeout.connect(self._do_refresh)
+
+        self._load_plan_state()
+
         source_holder.on(AfterSourceChanged, self._on_source_changed)
+
+    def _load_plan_state(self) -> None:
+        try:
+            s = json.loads(self._settings.get('Application.today_plan_settings') or '{}')
+        except (json.JSONDecodeError, TypeError):
+            s = {}
+        self._plan_state = s.get('plan_state', {})
+        self._has_planned = bool(s.get('has_planned', False))
+
+    def _save_plan_state(self) -> None:
+        self._settings.set({
+            'Application.today_plan_settings': json.dumps({
+                'plan_state': self._plan_state,
+                'has_planned': self._has_planned,
+            })
+        })
 
     def _on_source_changed(self, event: str, source: AbstractEventSource) -> None:
         self._source = source
+        self._load_plan_state()
         source.on(SourceMessagesProcessed, self._on_data_loaded)
+        source.on(AfterPomodoroComplete, self._on_data_loaded)
+        source.on(AfterPomodoroVoided, self._on_data_loaded)
+        source.on(TimerWorkComplete, self._on_data_loaded)
+        source.on(TimerRestComplete, self._on_data_loaded)
         self.refresh()
 
-    def _on_data_loaded(self, event: str, source: AbstractEventSource) -> None:
+    def _on_data_loaded(self, event: str, source: AbstractEventSource, **kwargs) -> None:
         self.refresh()
 
     def _get_all_incomplete_workitems(self) -> list:
@@ -758,6 +801,7 @@ class TodayPlanWidget(QWidget):
         if dialog.exec() == QDialog.DialogCode.Accepted:
             self._plan_state = dialog.get_result()
             self._has_planned = True
+            self._save_plan_state()
             self.refresh()
 
     def _on_review_clicked(self):
@@ -766,15 +810,13 @@ class TodayPlanWidget(QWidget):
         dialog = ReviewDialog(self._source, self._theme, self)
         dialog.exec()
 
-    def _clear_cards(self) -> None:
-        while self._cards_layout.count() > 0:
-            item = self._cards_layout.takeAt(0)
-            if item is None:
-                continue
-            w = item.widget()
-            if w is not None:
-                w.setParent(None)
-                w.deleteLater()
+    def _remove_card(self, uid: str) -> None:
+        w = self._card_widgets.pop(uid, None)
+        if w is not None:
+            self._cards_layout.removeWidget(w)
+            w.setParent(None)
+            w.hide()
+            w.deleteLater()
 
     def _find_workitem(self, uid: str):
         if self._source is None:
@@ -825,6 +867,7 @@ class TodayPlanWidget(QWidget):
             bg=QColor(self._border_color),
             text_color=self._text_color,
         )
+        pie.setObjectName('pie_chart')
         row.addWidget(pie)
 
         info_col = QVBoxLayout()
@@ -866,6 +909,7 @@ class TodayPlanWidget(QWidget):
         row.addLayout(info_col, 1)
 
         start_btn = QPushButton('开始')
+        start_btn.setObjectName('start_btn')
         start_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         start_btn.setFixedWidth(64)
         start_btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
@@ -931,6 +975,12 @@ class TodayPlanWidget(QWidget):
             )
 
     def refresh(self) -> None:
+        if not self._refresh_pending:
+            self._refresh_pending = True
+            self._refresh_timer.start(0)
+
+    def _do_refresh(self) -> None:
+        self._refresh_pending = False
         if self._source is None:
             return
 
@@ -959,39 +1009,100 @@ class TodayPlanWidget(QWidget):
             ))
         self._timeline.set_entries(entries)
 
-        self._clear_cards()
+        should_show_hint = False
+        hint_text = '点击右上角"规划今日"按钮开始安排今日任务'
 
         if not self._has_planned or not self._plan_state:
-            hint = QLabel('点击右上角"规划今日"按钮开始安排今日任务')
-            hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            hint.setStyleSheet(
-                f'color: {self._dim_color.name()}; background: transparent; padding: 40px;'
-            )
-            hint_font = QFont(self.font())
-            hint_font.setPointSize(max(self.font().pointSize() + 1, 11))
-            hint.setFont(hint_font)
-            self._cards_layout.addWidget(hint)
+            should_show_hint = True
         else:
-            any_shown = False
+            desired = {}
             for uid, state in self._plan_state.items():
                 if not state.get('enabled'):
                     continue
                 wi = self._find_workitem(uid)
                 if wi is None:
                     continue
-                planned_count = state.get('count', 0)
-                self._cards_layout.addWidget(self._make_card(wi, planned_count))
-                any_shown = True
-            if not any_shown:
-                hint = QLabel('未选择任何任务，请点击"规划今日"重新选择')
-                hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                hint.setStyleSheet(
+                desired[uid] = state.get('count', 0)
+
+            if not desired:
+                should_show_hint = True
+                hint_text = '未选择任何任务，请点击"规划今日"重新选择'
+            else:
+                for uid in list(self._card_widgets.keys()):
+                    if uid not in desired:
+                        self._remove_card(uid)
+
+                for uid, planned_count in desired.items():
+                    wi = self._find_workitem(uid)
+                    if wi is None:
+                        self._remove_card(uid)
+                        continue
+                    if uid in self._card_widgets:
+                        self._update_card(uid, wi, planned_count)
+                    else:
+                        card = self._make_card(wi, planned_count)
+                        insert_idx = self._cards_layout.count() - 1
+                        if insert_idx < 0:
+                            insert_idx = 0
+                        self._cards_layout.insertWidget(insert_idx, card)
+                        self._card_widgets[uid] = card
+
+        if should_show_hint:
+            if self._hint_widget is None:
+                self._hint_widget = QLabel(hint_text)
+                self._hint_widget.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                self._hint_widget.setStyleSheet(
                     f'color: {self._dim_color.name()}; background: transparent; padding: 40px;'
                 )
-                self._cards_layout.addWidget(hint)
+                hint_font = QFont(self.font())
+                hint_font.setPointSize(max(self.font().pointSize() + 1, 11))
+                self._hint_widget.setFont(hint_font)
+            else:
+                self._hint_widget.setText(hint_text)
+            if self._hint_widget.parent() is None:
+                insert_idx = self._cards_layout.count() - 1
+                if insert_idx < 0:
+                    insert_idx = 0
+                self._cards_layout.insertWidget(insert_idx, self._hint_widget)
+            self._hint_widget.show()
+        else:
+            if self._hint_widget is not None:
+                self._hint_widget.hide()
 
-        self._cards_layout.addStretch(1)
+        if self._cards_layout.count() == 0 or (
+            self._cards_layout.count() == 1 and self._cards_layout.itemAt(0).spacerItem() is not None
+        ):
+            if self._cards_layout.count() == 0:
+                self._cards_layout.addStretch(1)
+
         self._update_summary()
+
+    def _update_card(self, uid: str, wi, planned_count: int) -> None:
+        card = self._card_widgets.get(uid)
+        if card is None:
+            return
+        done_today = self._count_workitem_done_today(wi)
+        remaining = max(planned_count - done_today, 0)
+
+        pie = card.findChild(QWidget, 'pie_chart')
+        if pie is not None and isinstance(pie, PieChartWidget):
+            pie_total = planned_count if planned_count > 0 else max(len(list(wi.values())), 1)
+            pie.update_data(min(done_today, pie_total), pie_total)
+
+        labels = card.findChildren(QLabel)
+        for lbl in labels:
+            text = lbl.text()
+            if text.startswith('计划 ') or text.startswith('未选择'):
+                lbl.setText(f'计划 {planned_count} · 完成 {done_today} · 剩余 {remaining}')
+
+        start_btn = card.findChild(QPushButton, 'start_btn')
+        if start_btn is not None:
+            if wi.is_sealed() or (planned_count > 0 and done_today >= planned_count):
+                start_btn.setEnabled(False)
+                start_btn.setText('已完成')
+            else:
+                start_btn.setEnabled(True)
+                start_btn.setText('开始')
 
     def showEvent(self, event):
         super().showEvent(event)

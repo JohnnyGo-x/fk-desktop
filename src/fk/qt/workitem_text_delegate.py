@@ -216,6 +216,7 @@ class WorkitemTextDelegate(AbstractItemDelegate):
         editor_w = max(rect.width() - text_left_offset - 8, 60)
         if rect.height() < min_h:
             y_offset = (min_h - rect.height()) // 2
-            editor.setGeometry(editor_x, rect.y() - y_offset, editor_w, min_h)
+            editor_y = max(rect.y() - y_offset, 0)
+            editor.setGeometry(editor_x, editor_y, editor_w, min_h)
         else:
             editor.setGeometry(editor_x, rect.y() + (rect.height() - min_h) // 2, editor_w, min_h)

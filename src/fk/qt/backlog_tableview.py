@@ -65,7 +65,8 @@ class _BacklogEditDelegate(QStyledItemDelegate):
         min_h = 32
         if rect.height() < min_h:
             y_offset = (min_h - rect.height()) // 2
-            editor.setGeometry(rect.x(), rect.y() - y_offset, rect.width(), min_h)
+            editor_y = max(rect.y() - y_offset, 0)
+            editor.setGeometry(rect.x(), editor_y, rect.width(), min_h)
         else:
             editor.setGeometry(rect)
 
