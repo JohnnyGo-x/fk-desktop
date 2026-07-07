@@ -16,7 +16,7 @@
 import logging
 
 from PySide6.QtCore import Qt, QModelIndex
-from PySide6.QtWidgets import QWidget, QHeaderView, QMenu, QMessageBox, QStyledItemDelegate, QLineEdit
+from PySide6.QtWidgets import QWidget, QHeaderView, QMenu, QMessageBox
 
 from fk.core.abstract_data_item import generate_unique_name, generate_uid
 from fk.core.abstract_event_source import AbstractEventSource, start_workitem
@@ -29,45 +29,15 @@ from fk.core.tag import Tag
 from fk.core.timer import PomodoroTimer
 from fk.core.timer_data import TimerData
 from fk.core.workitem import Workitem
-from fk.core.workitem_strategies import DeleteWorkitemStrategy, CreateWorkitemStrategy, ReopenWorkitemStrategy
+from fk.core.workitem_strategies import DeleteWorkitemStrategy, CreateWorkitemStrategy
 from fk.desktop.application import Application
 from fk.qt.abstract_tableview import AbstractTableView
 from fk.qt.actions import Actions
-from fk.qt.focus_widget import complete_item
 from fk.qt.pomodoro_delegate import PomodoroDelegate
 from fk.qt.workitem_model import WorkitemModel
-from fk.qt.workitem_state_delegate import WorkitemStateDelegate
-from fk.qt.workitem_text_delegate import WorkitemTextDelegate
+from fk.qt.workitem_text_delegate import WorkitemProgressDelegate
 
 logger = logging.getLogger(__name__)
-
-
-class _WorkitemEditDelegate(QStyledItemDelegate):
-    def createEditor(self, parent, option, index):
-        editor = QLineEdit(parent)
-        editor.setMinimumHeight(32)
-        editor.setStyleSheet("""
-            QLineEdit {
-                padding: 6px 10px;
-                font-size: 13px;
-                border: 1px solid #007AFF;
-                border-radius: 6px;
-                background: white;
-                color: #000;
-                selection-background-color: #B4D8FE;
-            }
-        """)
-        return editor
-
-    def updateEditorGeometry(self, editor, option, index):
-        rect = option.rect
-        min_h = 32
-        if rect.height() < min_h:
-            y_offset = (min_h - rect.height()) // 2
-            editor_y = max(rect.y() - y_offset, 0)
-            editor.setGeometry(rect.x(), editor_y, rect.width(), min_h)
-        else:
-            editor.setGeometry(rect.x(), rect.y() + (rect.height() - min_h) // 2, rect.width(), min_h)
 
 
 class WorkitemTableView(AbstractTableView[Backlog | Tag, Workitem]):
@@ -94,7 +64,6 @@ class WorkitemTableView(AbstractTableView[Backlog | Tag, Workitem]):
         self._menu = self._init_menu(actions)
         source_holder.on(AfterSourceChanged, self._on_source_changed)
         self.update_actions(None)
-        self.setAlternatingRowColors(True)
         application.get_settings().on(AfterSettingsChanged, self._on_setting_changed)
         if timer is not None:
             timer.on(PomodoroTimer.TimerTick, self._on_tick)
@@ -102,40 +71,22 @@ class WorkitemTableView(AbstractTableView[Backlog | Tag, Workitem]):
             logger.debug('WorkitemTableView will not update automatically on timer ticks')
 
     def _on_setting_changed(self, event: str, old_values: dict[str, str], new_values: dict[str, str]):
-        if 'Application.theme' in new_values or 'Application.feature_tags' in new_values:
+        if 'Application.theme' in new_values:
             self._configure_delegate()
             self._resize()
 
-    def _is_tags_enabled(self) -> bool:
-        return self._application.get_settings().get('Application.feature_tags') == 'True'
-
     def _configure_delegate(self):
-        # Workitem state -- image or no delegate
-        if self._is_tags_enabled():
-            self.setItemDelegateForColumn(
-                0,
-                WorkitemStateDelegate(
-                    self,
-                    self._application.get_icon_theme(),
-                    self._application.get_theme_variables()['SELECTION_BG_COLOR'],
-                    self._application.get_theme_variables()['TABLE_CROSSOUT_COLOR']))
-        else:
-            self.setItemDelegateForColumn(0, None)
+        self.setItemDelegateForColumn(0, None)
 
-        # Workitem text -- HTML or no delegate
-        if self._is_tags_enabled():
-            self.setItemDelegateForColumn(
-                1,
-                WorkitemTextDelegate(
-                    self,
-                    self._application.get_icon_theme(),
-                    self._application.get_theme_variables()['TABLE_TEXT_COLOR'],
-                    self._application.get_theme_variables()['SELECTION_BG_COLOR'],
-                    self._application.get_theme_variables()['TABLE_CROSSOUT_COLOR']))
-        else:
-            self.setItemDelegateForColumn(1, _WorkitemEditDelegate(self))
+        self.setItemDelegateForColumn(
+            1,
+            WorkitemProgressDelegate(
+                self,
+                self._application.get_icon_theme(),
+                self._application.get_theme_variables()['TABLE_TEXT_COLOR'],
+                self._application.get_theme_variables()['SELECTION_BG_COLOR'],
+                self._application.get_theme_variables()['TABLE_CROSSOUT_COLOR']))
 
-        # Pomodoros display
         self.setItemDelegateForColumn(
             2,
             PomodoroDelegate(
@@ -143,7 +94,7 @@ class WorkitemTableView(AbstractTableView[Backlog | Tag, Workitem]):
                 self._application.get_icon_theme(),
                 self._application.get_theme_variables()['SELECTION_BG_COLOR'],
                 self._application.get_theme_variables()['TABLE_CROSSOUT_COLOR'],
-                self._is_tags_enabled()))
+                True))
 
     def _update_actions_if_needed(self, workitem: Workitem):
         current = self.get_current()
@@ -173,8 +124,6 @@ class WorkitemTableView(AbstractTableView[Backlog | Tag, Workitem]):
             actions['workitems_table.addPomodoro'],
             actions['workitems_table.removePomodoro'],
             actions['workitems_table.hideCompleted'],
-            actions['workitems_table.completeItem'],
-            actions['workitems_table.reopenItem'],
         ])
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.customContextMenuRequested.connect(lambda p: menu.exec(self.mapToGlobal(p)))
@@ -186,8 +135,6 @@ class WorkitemTableView(AbstractTableView[Backlog | Tag, Workitem]):
         actions.add('workitems_table.renameItem', "Rename Item", 'F6', "tool-rename", WorkitemTableView.rename_selected_workitem)
         actions.add('workitems_table.deleteItem', "Delete Item", 'Del', "tool-delete", WorkitemTableView.delete_selected_workitem)
         actions.add('workitems_table.startItem', "Start Item", 'Ctrl+S', "tool-start-item", WorkitemTableView.start_selected_workitem)
-        actions.add('workitems_table.completeItem', "Complete Item", 'Ctrl+P', "tool-complete-item", WorkitemTableView.complete_selected_workitem)
-        actions.add('workitems_table.reopenItem', "Reopen Item", 'Ctrl+Shift+R', "tool-reopen", WorkitemTableView.reopen_selected_workitem)
         actions.add('workitems_table.addPomodoro', "Add Pomodoro", 'Ctrl++', "tool-add-pomodoro", WorkitemTableView.add_pomodoro)
         actions.add('workitems_table.removePomodoro', "Remove Pomodoro", 'Ctrl+-', "tool-remove-pomodoro", WorkitemTableView.remove_pomodoro)
         actions.add('workitems_table.hideCompleted',
@@ -214,8 +161,6 @@ class WorkitemTableView(AbstractTableView[Backlog | Tag, Workitem]):
         self._actions['workitems_table.startItem'].setEnabled(is_workitem_editable
                                                               and (selected.is_startable() or len(selected) == 0 or selected.is_tracker())
                                                               and self._source.get_data().get_current_user().get_timer().is_idling())
-        self._actions['workitems_table.completeItem'].setEnabled(is_workitem_editable)
-        self._actions['workitems_table.reopenItem'].setEnabled(is_workitem_selected and selected.is_sealed())
         self._actions['workitems_table.addPomodoro'].setEnabled(is_workitem_editable and not is_tracker)
         self._actions['workitems_table.removePomodoro'].setEnabled(is_workitem_editable
                                                                    and selected.is_startable()
@@ -273,16 +218,6 @@ class WorkitemTableView(AbstractTableView[Backlog | Tag, Workitem]):
             raise Exception("Trying to start a workitem, while there's none selected")
         start_workitem(selected, self._source)
 
-    def complete_selected_workitem(self) -> None:
-        selected: Workitem = self.get_current()
-        complete_item(selected, self, self._source)
-
-    def reopen_selected_workitem(self) -> None:
-        selected: Workitem = self.get_current()
-        if selected is None:
-            raise Exception("Trying to reopen a workitem, while there's none selected")
-        self._source.execute(ReopenWorkitemStrategy, [selected.get_uid()])
-
     def add_pomodoro(self) -> None:
         selected: Workitem = self.get_current()
         if selected is None:
@@ -311,10 +246,7 @@ class WorkitemTableView(AbstractTableView[Backlog | Tag, Workitem]):
         self.setColumnHidden(0, True)
         self.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         self.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
-
-        # Resizing to contents results in visible blinking on Kubuntu 20.04, so cannot be enabled by default.
-        self.verticalHeader().setSectionResizeMode(
-            QHeaderView.ResizeMode.ResizeToContents if self._is_tags_enabled() else QHeaderView.ResizeMode.Fixed)
+        self.verticalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
 
     def _on_tick(self, timer: TimerData, counter: int, event: str) -> None:
         if counter % 10 == 0:

@@ -24,7 +24,7 @@ from fk.core.abstract_settings import AbstractSettings
 from fk.core.event_source_holder import EventSourceHolder, AfterSourceChanged, BeforeSourceChanged
 from fk.core.events import AfterSettingsChanged, SourceMessagesProcessed, AfterBacklogCreate, \
     AfterBacklogRename, AfterWorkitemCreate, AfterWorkitemRename, AfterPomodoroAdd, AfterPomodoroRemove, \
-    AfterPomodoroWorkStart, AfterPomodoroComplete, AfterWorkitemComplete, AfterPomodoroVoided
+    AfterPomodoroWorkStart, AfterPomodoroComplete, AfterPomodoroVoided
 from fk.core.pomodoro import Pomodoro
 from fk.core.workitem import Workitem
 from fk.qt.backlog_tableview import BacklogTableView
@@ -74,7 +74,6 @@ class Tutorial:
             AfterPomodoroWorkStart: self._on_pomodoro_work_start,
             AfterPomodoroComplete: self._on_pomodoro_complete,
             AfterPomodoroVoided: self._on_pomodoro_complete,
-            AfterWorkitemComplete: self._on_workitem_complete,
         }
 
         settings.on(AfterSettingsChanged, self._on_setting_changed)
@@ -153,7 +152,7 @@ class Tutorial:
 
     def _on_messages(self, complete: Callable, skip: Callable, **kwargs) -> None:
         show_tutorial_overlay(self._main_window,
-                              '1 / 11: Welcome to Flowkeeper! Let\'s start by creating your first backlog. You would '
+                              '1 / 10: Welcome to Flowkeeper! Let\'s start by creating your first backlog. You would '
                               'usually create a new one every morning.\n\n'
                               'Hotkey: Ctrl+N / ⌘N',
                               self._get_toolbar_button_position('backlogs_table.newBacklog', 'up'),
@@ -165,7 +164,7 @@ class Tutorial:
     def _on_backlog_create(self, complete: Callable, skip: Callable, **kwargs) -> None:
         backlogs: BacklogTableView = self._main_window.findChild(BacklogTableView, "backlogs_table")
         show_tutorial_overlay(self._main_window,
-                              '2 / 11: Type some catchy name for your backlog and press Enter.\n\n'
+                              '2 / 10: Type some catchy name for your backlog and press Enter.\n\n'
                               'You can rename existing backlogs by double-clicking them or pressing Ctrl+R / ⌘R.',
                               _get_row_position(backlogs, 0.15, 0, 0, 'down'),
                               'info',
@@ -175,7 +174,7 @@ class Tutorial:
 
     def _on_backlog_rename(self, complete: Callable, skip: Callable, **kwargs) -> None:
         show_tutorial_overlay(self._main_window,
-                              '3 / 11: Now create a work item in the selected backlog. Work items are tasks, '
+                              '3 / 10: Now create a work item in the selected backlog. Work items are tasks, '
                               'which you can execute using Pomodoro Technique.\n\n'
                               'Hotkey: Ins',
                               self._get_toolbar_button_position('workitems_table.newItem', 'up'),
@@ -187,7 +186,7 @@ class Tutorial:
     def _on_workitem_create(self, complete: Callable, skip: Callable, **kwargs) -> None:
         workitems: WorkitemTableView = self._main_window.findChild(WorkitemTableView, "workitems_table")
         show_tutorial_overlay(self._main_window,
-                              '4 / 11: Choose a better name for this work item and press Enter.\n\n'
+                              '4 / 10: Choose a better name for this work item and press Enter.\n\n'
                               'Just like backlogs, you can rename work items by double-clicking them or '
                               'by pressing F6.',
                               _get_row_position(workitems, 0.15, 0, 1, 'down'),
@@ -198,7 +197,7 @@ class Tutorial:
 
     def _on_workitem_rename(self, complete: Callable, skip: Callable, workitem: Workitem, **kwargs) -> None:
         show_tutorial_overlay(self._main_window,
-                              '5 / 11: Before you can start working on it, you need to estimate this task in '
+                              '5 / 10: Before you can start working on it, you need to estimate this task in '
                               '25-minute pomodoros. Add several pomodoros by clicking this button.\n\n'
                               'Hotkey: Ctrl++ / ⌘+',
                               self._get_toolbar_button_position('workitems_table.addPomodoro', 'down'),
@@ -211,7 +210,7 @@ class Tutorial:
         if len(workitem) >= 3:
             workitems: WorkitemTableView = self._main_window.findChild(WorkitemTableView, "workitems_table")
             show_tutorial_overlay(self._main_window,
-                                  '6 / 11: If you overestimated your work item, you can delete excessive pomodoros. '
+                                  '6 / 10: If you overestimated your work item, you can delete excessive pomodoros. '
                                   'Leave at least two pomodoros to continue the tutorial.\n\n'
                                   'Hotkey: Ctrl+- / ⌘-',
                                   _get_row_position(workitems, 0.5, 0, 2, 'up'),
@@ -223,7 +222,7 @@ class Tutorial:
     def _on_pomodoro_remove(self, complete: Callable, skip: Callable, workitem: Workitem, **kwargs) -> None:
         if len(workitem) >= 2:
             show_tutorial_overlay(self._main_window,
-                                  f'7 / 11: Now you are ready to start your first pomodoro by clicking ▶️ button '
+                                  f'7 / 10: Now you are ready to start your first pomodoro by clicking ▶️ button '
                                   f'in the toolbar.\n\n'
                                   f'Hotkey: Ctrl+S / ⌘S',
                                   self._get_toolbar_button_position('workitems_table.startItem', 'down'),
@@ -244,7 +243,7 @@ class Tutorial:
             else:
                 action = 'clicking the timer indicator and selecting "Void Pomodoro"'
             show_tutorial_overlay(window,
-                                  f'8 / 11: Take a minute to explore this view. We call it Focus Mode, and this is '
+                                  f'8 / 10: Take a minute to explore this view. We call it Focus Mode, and this is '
                                   f'where Flowkeeper spends most of its time. You can customize this view in the '
                                   f'Settings.\n\n'
                                   f'You probably don\'t want to wait for 25 minutes to continue this tutorial, so '
@@ -265,7 +264,7 @@ class Tutorial:
         if completed_count == 1:
             workitems: WorkitemTableView = self._main_window.findChild(WorkitemTableView, "workitems_table")
             show_tutorial_overlay(self._main_window,
-                                  f'9 / 11: {"We are very sorry that you had to void" if len(pomodoro) > 0 else "Congratulations! You successfully completed"} your first pomodoro. '
+                                  f'9 / 10: {"We are very sorry that you had to void" if len(pomodoro) > 0 else "Congratulations! You successfully completed"} your first pomodoro. '
                                   f'{"Note a little tick meaning an interruption" if len(pomodoro) > 0 else "Note how its icon changed"}.\n\n'
                                   'You might have heard a DING when that happened -- you can configure all Flowkeeper '
                                   'sounds in the Settings > Audio.\n\n'
@@ -277,26 +276,15 @@ class Tutorial:
                                   skip,
                                   'up')
         elif completed_count > 1:
+            workitems: WorkitemTableView = self._main_window.findChild(WorkitemTableView, "workitems_table")
             show_tutorial_overlay(self._main_window,
-                                  '10 / 11: Well done! Now let\'s imagine that you finished this work item. You can '
-                                  'mark it completed by clicking the ✔️ button.\n\n'
-                                  f'Hotkey: Ctrl+P / ⌘P',
-                                  self._get_toolbar_button_position('workitems_table.completeItem', 'down'),
+                                  '10 / 10: Well done! You finished this tutorial.\n\n'
+                                  'When all pomodoros for a work item are done, it will turn gray automatically.\n'
+                                  'You can always add more pomodoros to keep working on it.\n\n'
+                                  'Great job!',
+                                  _get_row_position(workitems, 0.15, 0, 1, 'up'),
                                   'info',
                                   complete,
                                   skip,
-                                  'down')
-
-    def _on_workitem_complete(self, complete: Callable, skip: Callable, **kwargs) -> None:
-        workitems: WorkitemTableView = self._main_window.findChild(WorkitemTableView, "workitems_table")
-        show_tutorial_overlay(self._main_window,
-                              '11 / 11: Note that as you marked that work item completed you can\'t modify it anymore. '
-                              'The only thing you can do is delete it.\n\n'
-                              'Hotkey: Del\n\n'
-                              'Great job, you finished this tutorial!',
-                              _get_row_position(workitems, 0.15, 0, 1, 'up'),
-                              'info',
-                              complete,
-                              skip,
-                              'up',
-                              True)
+                                  'up',
+                                  True)

@@ -179,9 +179,7 @@ class WorkitemModel(AbstractDropModel):
         super().__init__(1, parent, source_holder)
         self._font_new = QtGui.QFont()
         self._font_running = QtGui.QFont()
-        # self._font_running.setWeight(QtGui.QFont.Weight.Bold)
         self._font_sealed = QtGui.QFont()
-        self._font_sealed.setStrikeOut(True)
         self._backlog_or_tag = None
         settings = source_holder.get_settings()
         self._hide_completed = (settings.get('Application.hide_completed') == 'True')
@@ -281,7 +279,7 @@ class WorkitemModel(AbstractDropModel):
             item0: WorkitemPlanned = self.item(i, 0)
             wi = item0.data(500)
             if wi == workitem:
-                if self._hide_completed and workitem.is_sealed():
+                if self._hide_completed and self._is_workitem_completed(workitem):
                     self.removeRow(i)
                 else:
                     font = self._get_font(workitem)
@@ -311,7 +309,7 @@ class WorkitemModel(AbstractDropModel):
                 workitems = sorted(backlog_or_tag.get_workitems(),
                                    key=lambda a: a.get_last_modified_date())
             for workitem in workitems:
-                if self._hide_completed and workitem.is_sealed():
+                if self._hide_completed and self._is_workitem_completed(workitem):
                     continue
                 self.appendRow(self.item_for_object(workitem))
         self.setHorizontalHeaderItem(0, QStandardItem(''))
@@ -328,11 +326,17 @@ class WorkitemModel(AbstractDropModel):
     def get_primary_type(self) -> str:
         return 'application/flowkeeper.workitem.id'
 
+    @staticmethod
+    def _is_workitem_completed(workitem: Workitem) -> bool:
+        total = len(workitem)
+        if total == 0:
+            return False
+        completed = sum(1 for p in workitem.values() if p.is_finished())
+        return completed >= total
+
     def _get_font(self, workitem: Workitem) -> QtGui.QFont:
         if workitem.is_running():
             return self._font_running
-        elif workitem.is_sealed():
-            return self._font_sealed
         return self._font_new
 
     def item_for_object(self, workitem: Workitem) -> list[QStandardItem]:
@@ -350,7 +354,7 @@ class WorkitemModel(AbstractDropModel):
         visible_index = 0
         if self._hide_completed:
             for item in self._backlog_or_tag.values():
-                if item.is_sealed():
+                if self._is_workitem_completed(item):
                     to_add += 1
                 else:
                     visible_index += 1

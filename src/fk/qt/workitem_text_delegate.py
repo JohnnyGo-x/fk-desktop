@@ -21,12 +21,11 @@ from PySide6.QtGui import QStaticText, QPainter, QColor, QBrush, QPen, QFont, QF
 from PySide6.QtWidgets import QStyleOptionViewItem, QStyle, QLineEdit
 
 from fk.core.workitem import Workitem
-from fk.qt.abstract_item_delegate import AbstractItemDelegate, get_padding
+from fk.qt.abstract_item_delegate import AbstractItemDelegate
 
 TAG_REGEX = re.compile('#(\\w+)')
 
 _APPLE_BLUE = QColor('#007AFF')
-_APPLE_GREEN = QColor('#34C759')
 _CIRCLE_STROKE = QColor('#C7C7CC')
 _SEPARATOR = QColor(0, 0, 0, 24)
 _META_COLOR = QColor('#8E8E93')
@@ -36,7 +35,7 @@ _CIRCLE_LEFT_PAD = 12
 _TEXT_LEFT_GAP = 12
 
 
-class WorkitemTextDelegate(AbstractItemDelegate):
+class WorkitemProgressDelegate(AbstractItemDelegate):
     _text_color: str
 
     def __init__(self,
@@ -77,10 +76,8 @@ class WorkitemTextDelegate(AbstractItemDelegate):
             color = '#8E8E93'
         else:
             color = self._text_color
-        decoration = 'line-through' if is_done else 'none'
         return (f'<span '
                 f'style="color: {color}; '
-                f'text-decoration: {decoration}; '
                 f'">{text}</span>')
 
     def _get_meta_text(self, workitem: Workitem) -> str:

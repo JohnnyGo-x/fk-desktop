@@ -56,6 +56,14 @@ class SearchBar(QtWidgets.QLineEdit):
         if self.isVisible():
             self.hide()
 
+    @staticmethod
+    def _is_workitem_completed(workitem: Workitem) -> bool:
+        total = len(workitem)
+        if total == 0:
+            return False
+        completed = sum(1 for p in workitem.values() if p.is_finished())
+        return completed >= total
+
     def _select(self, index: QModelIndex):
         workitem: Workitem = index.data(500)
         backlog: Backlog = workitem.get_parent()
@@ -76,7 +84,7 @@ class SearchBar(QtWidgets.QLineEdit):
 
         model = QStandardItemModel()
         for wi in self._source_holder.get_source().workitems():
-            if self._hide_completed and wi.is_sealed():
+            if self._hide_completed and self._is_workitem_completed(wi):
                 continue
             item = QStandardItem()
             item.setText(wi.get_name())

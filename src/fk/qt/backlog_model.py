@@ -87,6 +87,18 @@ class BacklogModel(AbstractDropModel):
         source.on(events.AfterBacklogDelete, self._backlog_removed)
         source.on(events.AfterBacklogRename, self._backlog_renamed)
         source.on(events.AfterBacklogReorder, self._backlog_reordered)
+        source.on('AfterPomodoro*',
+                  lambda **kwargs: self._repaint_backlog_for(
+                      kwargs['workitem'].get_parent() if 'workitem' in kwargs else kwargs['pomodoro'].get_parent().get_parent()
+                  ))
+
+    def _repaint_backlog_for(self, backlog: Backlog) -> None:
+        for i in range(self.rowCount()):
+            item: BacklogItem = self.item(i)
+            if item.data(500) == backlog:
+                index = self.index(i, 0)
+                self.dataChanged.emit(index, index, [Qt.ItemDataRole.DisplayRole])
+                return
 
     def _backlog_added(self, backlog: Backlog, **kwargs) -> None:
         self.insertRow(0, BacklogItem(backlog))

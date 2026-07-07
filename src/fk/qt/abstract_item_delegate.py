@@ -44,18 +44,4 @@ class AbstractItemDelegate(QItemDelegate):
         if QStyle.StateFlag.State_Selected in option.state:
             painter.fillRect(option.rect, self._selection_brush)
 
-        if is_sealed:
-            painter.setPen(self._crossout_pen)
-            painter.translate(option.rect.topLeft())
-            lh = option.fontMetrics.height()
-            if lh == 0:
-                lh = 10 # Avoid division by zero in impossible cases
-            lines = int(option.rect.height() / lh)
-            padding = get_padding(option)
-            for i in range(lines):
-                painter.drawLine(0,
-                                 lh * (i + 0.5) + padding,
-                                 option.rect.width(),
-                                 lh * (i + 0.5) + padding)
-
         painter.restore()

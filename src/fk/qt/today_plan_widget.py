@@ -774,7 +774,7 @@ class TodayPlanWidget(QWidget):
         source.on(TimerRestComplete, self._on_data_loaded)
         self.refresh()
 
-    def _on_data_loaded(self, event: str, source: AbstractEventSource, **kwargs) -> None:
+    def _on_data_loaded(self, event: str, source: AbstractEventSource = None, **kwargs) -> None:
         self.refresh()
 
     def _get_all_incomplete_workitems(self) -> list:

@@ -17,10 +17,10 @@ import logging
 
 from PySide6.QtCore import QSize, QPoint, QLine
 from PySide6.QtGui import QPainter, QPixmap, Qt, QGradient, QColor, QMouseEvent, QIcon
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QLabel, QVBoxLayout, QMessageBox, QMenu, QSizePolicy, QToolButton, \
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QLabel, QVBoxLayout, QMenu, QSizePolicy, QToolButton, \
     QSpacerItem
 
-from fk.core.abstract_event_source import AbstractEventSource, start_workitem
+from fk.core.abstract_event_source import start_workitem
 from fk.core.abstract_serializer import sanitize_user_input
 from fk.core.abstract_settings import AbstractSettings
 from fk.core.abstract_timer_display import AbstractTimerDisplay
@@ -31,7 +31,6 @@ from fk.core.pomodoro_strategies import AddInterruptionStrategy
 from fk.core.timer import PomodoroTimer
 from fk.core.timer_strategies import StopTimerStrategy
 from fk.core.workitem import Workitem
-from fk.core.workitem_strategies import CompleteWorkitemStrategy
 from fk.desktop.application import Application, AfterFontsChanged
 from fk.desktop.interruption_dialog import InterruptionDialog
 from fk.qt.actions import Actions
@@ -39,22 +38,6 @@ from fk.qt.timer_widget import TimerWidget
 
 logger = logging.getLogger(__name__)
 DISPLAY_HEIGHT = 80
-
-
-def complete_item(item: Workitem, parent: QWidget, source: AbstractEventSource) -> None:
-    if item is None:
-        raise Exception("Trying to complete a workitem, while there's none selected")
-    if (not item.has_running_pomodoro()
-            or item.is_tracker()
-            or item.get_running_pomodoro().is_long_break()
-            or QMessageBox().warning(
-            parent,
-            "Confirmation",
-            f"Are you sure you want to complete workitem '{item.get_display_name()}'? This will void current pomodoro.",
-            QMessageBox.StandardButton.Ok,
-            QMessageBox.StandardButton.Cancel
-    ) == QMessageBox.StandardButton.Ok):
-        source.execute(CompleteWorkitemStrategy, [item.get_uid(), "finished"])
 
 
 class FocusWidget(QWidget, AbstractTimerDisplay):
@@ -182,10 +165,6 @@ class FocusWidget(QWidget, AbstractTimerDisplay):
             self._added.append(w)
             layout.addWidget(w)
 
-            w = self._create_button("focus.completeItem")
-            self._added.append(w)
-            layout.addWidget(w)
-
             if "window.pinWindow" in self._actions:
                 w = self._create_button("window.pinWindow")
                 self._added.append(w)
@@ -233,7 +212,6 @@ class FocusWidget(QWidget, AbstractTimerDisplay):
         actions.add('focus.interruption', "Interruption", 'Ctrl+T', "tool-interruption", FocusWidget._interruption)
         actions.add('focus.finishTracking', "Stop Tracking Time", 'Ctrl+S', "tool-finish-tracking", FocusWidget._finish_tracking)
         actions.add('focus.nextPomodoro', "Next Pomodoro", None, "tool-focus-next", FocusWidget._next_pomodoro)
-        actions.add('focus.completeItem', "Complete Item", None, "tool-focus-complete", FocusWidget._complete_item)
 
     def _create_button(self,
                        name: str,
@@ -252,7 +230,6 @@ class FocusWidget(QWidget, AbstractTimerDisplay):
         self._header_text.setText(text)
         self._header_subtext.setText(subtext)
         if not self._readonly:
-            self._actions['focus.completeItem'].setDisabled(True)
             self._actions['focus.voidPomodoro'].setVisible(False)
             self._actions['focus.voidPomodoro'].setDisabled(True)
             self._actions['focus.interruption'].setVisible(False)
@@ -370,10 +347,6 @@ class FocusWidget(QWidget, AbstractTimerDisplay):
             raise Exception('Cannot start next pomodoro on non-existent work item')
         start_workitem(self._continue_workitem, self._source_holder.get_source())
 
-    def _complete_item(self) -> None:
-        item = self.timer.get_running_workitem()
-        complete_item(item, self, self._source_holder.get_source())
-
     def tick(self, pomodoro: Pomodoro, state_text: str, my_value: float, my_max: float, mode: str) -> None:
         self._header_text.setText(state_text)
         self._timer_widget.set_values(my_value, my_max, None, None, mode)
@@ -411,7 +384,6 @@ class FocusWidget(QWidget, AbstractTimerDisplay):
                     self._actions['focus.finishTracking'].setDisabled(True)
                 self._actions['focus.nextPomodoro'].setDisabled(True)
                 self._actions['focus.nextPomodoro'].setText(f'Next Pomodoro ({running_item.get_short_display_name()})')
-                self._actions['focus.completeItem'].setDisabled(False)
         elif new_mode == 'ready':
             self.reset('Continue?', self._continue_workitem.get_display_name())
             self._timer_widget.set_values(0, 1, None, None, 'ready')
@@ -450,8 +422,6 @@ class FocusWidget(QWidget, AbstractTimerDisplay):
         context_menu.addAction(self._actions['window.focusMode'])
         if 'window.pinWindow' in self._actions:
             context_menu.addAction(self._actions['window.pinWindow'])
-        context_menu.addSeparator()
-        context_menu.addAction(self._actions['focus.completeItem'])
         context_menu.exec(self._timer_widget.mapToGlobal(pos))
 
     def mousePressEvent(self, event: QMouseEvent) -> None:

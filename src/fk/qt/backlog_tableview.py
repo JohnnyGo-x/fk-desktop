@@ -16,11 +16,11 @@
 import datetime
 import logging
 
-from PySide6.QtCore import Qt, QModelIndex
-from PySide6.QtGui import QDragMoveEvent, QDragEnterEvent
+from PySide6.QtCore import Qt, QModelIndex, QRectF, QPointF
+from PySide6.QtGui import QDragMoveEvent, QDragEnterEvent, QBrush, QPen, QColor, QFont, QFontMetrics, QPainter
 from PySide6.QtWidgets import (
     QWidget, QHeaderView, QMenu, QMessageBox, QInputDialog, QTableView, QAbstractItemView,
-    QStyledItemDelegate, QLineEdit,
+    QStyledItemDelegate, QLineEdit, QStyleOptionViewItem, QStyle,
 )
 
 from fk.core import events
@@ -43,7 +43,103 @@ from fk.qt.backlog_model import BacklogModel
 logger = logging.getLogger(__name__)
 
 
-class _BacklogEditDelegate(QStyledItemDelegate):
+_APPLE_BLUE = QColor('#007AFF')
+_CIRCLE_STROKE = QColor('#C7C7CC')
+_CIRCLE_DIAM = 18
+_CIRCLE_LEFT_PAD = 10
+_TEXT_LEFT_GAP = 10
+
+
+class BacklogProgressDelegate(QStyledItemDelegate):
+    _selection_brush: QBrush
+
+    def __init__(self, parent=None, selection_color='#cfdefc'):
+        super().__init__(parent)
+        self._selection_brush = QBrush(QColor(selection_color), Qt.BrushStyle.SolidPattern)
+
+    @staticmethod
+    def _get_progress(backlog: Backlog) -> tuple[int, int, float]:
+        total = 0
+        completed = 0
+        for wi in backlog.values():
+            for p in wi.values():
+                total += 1
+                if p.is_finished():
+                    completed += 1
+        if total == 0:
+            return 0, 0, 0.0
+        return completed, total, completed / total
+
+    def _draw_circle(self, painter, cx: float, cy: float, backlog: Backlog) -> None:
+        completed, total, ratio = self._get_progress(backlog)
+        is_done = total > 0 and completed >= total
+
+        radius = _CIRCLE_DIAM / 2.0
+        circle_rect = QRectF(cx - radius, cy - radius, _CIRCLE_DIAM, _CIRCLE_DIAM)
+
+        painter.save()
+        if is_done:
+            painter.setBrush(QBrush(_APPLE_BLUE))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.drawEllipse(circle_rect)
+            check_pen = QPen(QColor('white'))
+            check_pen.setWidthF(2.0)
+            check_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+            check_pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+            painter.setPen(check_pen)
+            p1 = QPointF(cx - 4, cy)
+            p2 = QPointF(cx - 1, cy + 3)
+            p3 = QPointF(cx + 4, cy - 3)
+            painter.drawLine(p1, p2)
+            painter.drawLine(p2, p3)
+        else:
+            if total > 0 and ratio > 0:
+                inner_pen = QPen(_APPLE_BLUE)
+                inner_pen.setWidthF(1.8)
+                painter.setPen(inner_pen)
+                painter.setBrush(Qt.BrushStyle.NoBrush)
+                painter.drawEllipse(circle_rect)
+                fill_rect = circle_rect.adjusted(3.5, 3.5, -3.5, -3.5)
+                painter.setBrush(QBrush(_APPLE_BLUE))
+                painter.setPen(Qt.PenStyle.NoPen)
+                span = int(-360 * 16 * ratio)
+                painter.drawPie(fill_rect, 90 * 16, span)
+            else:
+                stroke_pen = QPen(_CIRCLE_STROKE)
+                stroke_pen.setWidthF(1.6)
+                painter.setPen(stroke_pen)
+                painter.setBrush(Qt.BrushStyle.NoBrush)
+                painter.drawEllipse(circle_rect)
+        painter.restore()
+
+    def paint(self, painter, option: QStyleOptionViewItem, index: QModelIndex) -> None:
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        backlog: Backlog = index.data(500)
+
+        if option.state & QStyle.StateFlag.State_Selected:
+            painter.fillRect(option.rect, self._selection_brush)
+
+        rect = QRectF(option.rect)
+        cx = rect.left() + _CIRCLE_LEFT_PAD + _CIRCLE_DIAM / 2.0
+        cy = rect.top() + rect.height() / 2.0
+        self._draw_circle(painter, cx, cy, backlog)
+
+        text_left = rect.left() + _CIRCLE_LEFT_PAD + _CIRCLE_DIAM + _TEXT_LEFT_GAP
+        text = index.data(Qt.ItemDataRole.DisplayRole)
+        if text:
+            painter.setPen(QPen(QColor('#000')))
+            text_rect = QRectF(text_left, rect.top(), rect.width() - (text_left - rect.left()) - 8, rect.height())
+            painter.drawText(text_rect, int(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft), text)
+
+        painter.restore()
+
+    def sizeHint(self, option, index):
+        size = super().sizeHint(option, index)
+        size.setHeight(max(size.height(), 36))
+        return size
+
     def createEditor(self, parent, option, index):
         editor = QLineEdit(parent)
         editor.setMinimumHeight(32)
@@ -62,13 +158,16 @@ class _BacklogEditDelegate(QStyledItemDelegate):
 
     def updateEditorGeometry(self, editor, option, index):
         rect = option.rect
+        text_left_offset = _CIRCLE_LEFT_PAD + _CIRCLE_DIAM + _TEXT_LEFT_GAP
         min_h = 32
+        editor_x = rect.x() + text_left_offset
+        editor_w = max(rect.width() - text_left_offset - 4, 60)
         if rect.height() < min_h:
             y_offset = (min_h - rect.height()) // 2
             editor_y = max(rect.y() - y_offset, 0)
-            editor.setGeometry(rect.x(), editor_y, rect.width(), min_h)
+            editor.setGeometry(editor_x, editor_y, editor_w, min_h)
         else:
-            editor.setGeometry(rect)
+            editor.setGeometry(editor_x, rect.y() + (rect.height() - min_h) // 2, editor_w, min_h)
 
 
 class BacklogTableView(AbstractTableView[User, Backlog]):
@@ -97,7 +196,7 @@ class BacklogTableView(AbstractTableView[User, Backlog]):
         self._application = application
         self.update_actions(None)
         self.setAlternatingRowColors(True)
-        self.setItemDelegate(_BacklogEditDelegate(self))
+        self.setItemDelegate(BacklogProgressDelegate(self))
 
     def _lock_ui(self, event, after: int, last_received: datetime.datetime) -> None:
         self.update_actions(self.get_current())

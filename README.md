@@ -81,6 +81,26 @@
   - 使用项目根目录的绝对路径，避免依赖当前工作目录。
   - 默认以未签名方式构建 `.app` 包。
 
+### 8. 修复任务编辑遮挡与工具栏高度不一致
+
+- 限制内联编辑器 Y 坐标不超出表格顶部（`backlog_tableview.py`、`workitem_tableview.py`、`workitem_text_delegate.py`），防止双击编辑时文本框上边沿被工具栏遮挡。
+- `style-template.qss` 新增 `QToolBar` 统一高度（36px），主任务区与子任务区工具栏高度一致。
+- 主任务区默认宽度从 200px 增至 260px（`abstract_settings.py`），确保编辑按钮可见。
+
+### 9. 统计页过滤未完成项
+
+- `stats_window.py` 中 `extract_data` 和 `_collect_day_data` 过滤掉未完成/待完成的番茄钟，仅显示已完成和已取消。
+- 移除图表中 "Not started" 柱状集合，头部统计文字相应更新。
+
+### 10. Today Plan 缓存持久化与刷新优化
+
+- 新增 `Application.today_plan_settings` 隐藏设置项，将计划状态（`_plan_state` / `_has_planned`）以 JSON 持久化到 settings，重启后保留配置（`today_plan_widget.py`、`abstract_settings.py`）。
+- 移除 `desktop.py` 中 `toggle_today_plan` 冗余的 `refresh()` 调用，避免与 `showEvent` 重复触发。
+- 引入 `QTimer` 防抖机制，同一事件循环内多次 `refresh()` 调用合并为一次实际重建。
+- 卡片更新改为 diff 模式：按 workitem uid 对比增删，未变化的卡片不销毁重建，消除页面闪烁。
+- 监听 `AfterPomodoroComplete`、`AfterPomodoroVoided`、`TimerWorkComplete`、`TimerRestComplete` 事件，停留在 Today Plan 页面时番茄钟完成后即时刷新卡片状态（饼图、文字、按钮）。
+- 修复 `_on_data_loaded` 因缺少 `**kwargs` 导致事件回调传入额外参数时的 `TypeError`。
+
 ---
 
 ## 构建
