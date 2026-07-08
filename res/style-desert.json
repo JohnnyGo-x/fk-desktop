@@ -17,6 +17,7 @@
   "TOOLBAR_CHECKED_BG_COLOR": "#990D35",
 
   "HOVER_BG_COLOR": "#fcf0d0",
+  "HOVER_TOOLBAR_BG_COLOR": "rgba(0, 0, 0, 0.06)",
   "ALTERNATE_ROW_COLOR": "#fff8e8",
   "ITEM_RADIUS": "6px",
   "TOOLBAR_RADIUS": "8px"

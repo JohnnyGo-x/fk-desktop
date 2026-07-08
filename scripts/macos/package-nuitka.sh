@@ -110,25 +110,44 @@ xattr -cr dist/standalone/Flowkeeper.app
 
 # Step 9 - Create a DMG image
 echo ">>> Creating DMG..."
-create-dmg \
-  --volname "Flowkeeper Installer" \
-  --volicon "flowkeeper.icns" \
-  --window-pos 200 120 \
-  --window-size 800 400 \
-  --icon-size 100 \
-  --icon "Flowkeeper.app" 200 190 \
-  --hide-extension "Flowkeeper.app" \
-  --app-drop-link 600 185 \
-  "Flowkeeper.dmg" \
-  "dist/standalone"
+# Detach any leftover mounted volumes and clean previous DMGs
+hdiutil detach "/Volumes/Flowkeeper Installer" 2>/dev/null || true
+rm -f dist/Flowkeeper.dmg dist/rw.*.Flowkeeper.dmg dist/.DS_Store
+
+# Give Spotlight a moment to finish indexing the freshly built app bundle
+# (otherwise hdiutil fails with "resource busy" / "资源忙")
+sleep 3
+
+if [ "${USE_CREATE_DMG:-0}" = "1" ] && command -v create-dmg &>/dev/null; then
+    # Fancy DMG via create-dmg (requires Finder Automation permission for AppleScript)
+    create-dmg \
+      --volname "Flowkeeper Installer" \
+      --volicon "flowkeeper.icns" \
+      --window-pos 200 120 \
+      --window-size 800 400 \
+      --icon-size 100 \
+      --icon "Flowkeeper.app" 200 190 \
+      --hide-extension "Flowkeeper.app" \
+      --app-drop-link 600 185 \
+      "dist/Flowkeeper.dmg" \
+      "dist/standalone"
+else
+    # Plain DMG via hdiutil (no AppleScript, no permission prompts)
+    hdiutil create \
+      -volname "Flowkeeper Installer" \
+      -srcfolder dist/standalone \
+      -ov -format UDZO \
+      -fs HFS+ \
+      dist/Flowkeeper.dmg
+fi
 
 # Remove quarantine from the DMG as well
-xattr -cr "Flowkeeper.dmg" 2>/dev/null || true
+xattr -cr "dist/Flowkeeper.dmg" 2>/dev/null || true
 
 echo ""
 echo "============================================"
 echo "  Build complete!"
-echo "  DMG:  $PROJECT_ROOT/Flowkeeper.dmg"
+echo "  DMG:  $PROJECT_ROOT/dist/Flowkeeper.dmg"
 echo "  App:  $PROJECT_ROOT/dist/standalone/Flowkeeper.app"
 echo "  Version: $FK_VERSION"
 echo "============================================"

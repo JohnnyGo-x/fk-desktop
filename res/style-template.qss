@@ -117,8 +117,27 @@ QToolBar {
     max-height: 36px;
 }
 
+QToolBar#workitems_toolbar {
+    background-color: $PRIMARY_BG_COLOR;
+}
+
+QToolBar#backlogs_toolbar {
+    background-color: $SECONDARY_BG_COLOR;
+}
+
 QToolButton:hover {
-    background-color: $HOVER_BG_COLOR;
+    background-color: $HOVER_TOOLBAR_BG_COLOR;
+}
+
+QToolButton[circular="true"] {
+    border-radius: 22px;
+    padding: 6px;
+    margin: 0px;
+}
+
+QToolButton[circular="true"]:hover {
+    background-color: $HOVER_TOOLBAR_BG_COLOR;
+    border-radius: 22px;
 }
 
 #toolBacklogs:checked {

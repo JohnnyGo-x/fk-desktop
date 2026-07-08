@@ -141,9 +141,11 @@ class FocusWidget(QWidget, AbstractTimerDisplay):
             center_button_layout.setSpacing(0)
             center_button.setLayout(center_button_layout)
             void_pomodoro_button = self._create_button("focus.voidPomodoro")
+            void_pomodoro_button.setProperty("circular", "true")
             center_button_layout.addWidget(void_pomodoro_button)
             self._added.append(void_pomodoro_button)
             finish_tracking_button = self._create_button("focus.finishTracking")
+            finish_tracking_button.setProperty("circular", "true")
             center_button_layout.addWidget(finish_tracking_button)
             self._added.append(finish_tracking_button)
 
